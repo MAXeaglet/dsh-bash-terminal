@@ -19,9 +19,11 @@ A DeepSeek Harness (DSH) plugin: one `shell` tool that runs commands through **P
 
 ## Install
 
+The package ships the official `dsh.bundle` manifest (its own `cordis.patch.yml`): listing `dsh-bash-terminal` in a profile's `dsh.profile.bundles` auto-applies the mount — no manual profile edits.
+
 ```powershell
 npm install -g dsh-bash-terminal
-dsh plugin --profile web add dsh-bash-terminal
+dsh plugin --profile web add dsh-bash-terminal        # adds to profile bundles + applies the patch
 powershell -ExecutionPolicy Bypass -File install.ps1 install   # patches the DSH settings-UI allowlist (see below)
 # restart dsh web
 ```
@@ -40,7 +42,7 @@ For local development (junction install, source changes apply instantly) see the
 
 ## Interactive terminal
 
-`terminal` actions: `open` (start a session on the configured default terminal), `send` (write input + read new output), `read`, `signal` (SIGINT = Ctrl+C etc.), `close`, `list` (enumerate live sessions). State (cwd / variables / aliases) persists across calls; end input with `\\n`. Sessions are background jobs (`job_kill` works) and auto-close after 10 idle minutes (`idleMs` overrides on open).
+`terminal` actions: `open` (start a session on the configured default terminal), `send` (write input + read new output), `read`, `signal` (SIGINT = Ctrl+C etc.), `close`, `list` (enumerate live sessions). Reads wait for output to settle (quiet 300ms, cap 5s) so `send` returns the complete reply; buffer overflow reports a `truncated` notice. State (cwd / variables / aliases) persists across calls; end input with `\\n`. Sessions are background jobs (`job_kill` works) and auto-close after 10 idle minutes (`idleMs` overrides on open).
 
 ## Interactive terminal known limits (ConPTY)
 

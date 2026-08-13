@@ -135,6 +135,7 @@ Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" 
 - `action: send` 写入输入并读新输出；`action: read` 只读不写；`action: signal` 向前台进程组发信号（SIGINT = Ctrl+C）
 - `action: close` 终止会话
 - **会话状态跨调用保持**（cwd / 变量 / 别名），适合 REPL、ssh、交互式 CLI
+- `send` 会等待输出稳定（300ms 静默，上限 5s）返回**完整回复**；输出超 1MB 时报 `truncated` 提示
 - 输入用 `\\n`（或 \\r）结尾表示回车
 
 ## 沙箱（官方机制对接）
