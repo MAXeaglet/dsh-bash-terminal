@@ -119,11 +119,15 @@ if (wslFailed) {
 }
 await tool.execute({ action: "close", sessionId: wslOpened.sessionId }, exec).catch(() => {});
 
-// session cap: opening beyond MAX_SESSIONS refuses
+// session cap: opening beyond MAX_SESSIONS refuses; list shows them
 defaultShell = "gitbash";
 const capped = [];
 for (let i = 0; i < 8; i++) capped.push(await tool.execute({ action: "open" }, exec));
 await assert.rejects(() => tool.execute({ action: "open" }, exec), /too many open sessions/);
+const listed = await tool.execute({ action: "list" }, exec);
+assert.ok(Array.isArray(listed.sessions));
+assert.ok(listed.sessions.length >= 8, "list shows open sessions: " + listed.sessions.length);
+assert.ok(listed.sessions.every((s) => s.shell === "gitbash"));
 for (const s of capped) await tool.execute({ action: "close", sessionId: s.sessionId }, exec);
 
 // idle timeout: a session with a short idle window auto-closes

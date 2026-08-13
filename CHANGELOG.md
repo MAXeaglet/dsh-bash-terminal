@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 (2026-08-14)
+
+- `terminal` tool: new `list` action enumerates live sessions (sessionId / shell / pid) for multi-session management.
+
 ## 0.3.2 (2026-08-14)
 
 - Session cap: at most 8 concurrent terminal sessions (fail-fast beyond).
