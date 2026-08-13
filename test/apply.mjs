@@ -74,7 +74,8 @@ assert.deepStrictEqual(spawnCalls[0].argv.slice(0, 2), ["C:\\Program Files\\Git\
 userDefaultShell = "wsl";
 spawnCalls.length = 0;
 await registered.execute({ command: "pwd", description: "t", distro: "Ubuntu", workdir: "projects" }, exec);
-assert.deepStrictEqual(spawnCalls[0].argv, ["C:\\WINDOWS\\System32\\wsl.exe", "-d", "Ubuntu", "-e", "bash", "-lc", "pwd"]);
+const wslPath = (process.env.SystemRoot ?? "C:\\Windows").replace(/\\$/, "") + "\\System32\\wsl.exe";
+assert.deepStrictEqual(spawnCalls[0].argv, [wslPath, "-d", "Ubuntu", "-e", "bash", "-lc", "pwd"]);
 assert.strictEqual(spawnCalls[0].cwd, "D:\\WorkSpace\\projects");
 assert.ok(spawnCalls[0].env.WSLENV.includes("DSH_WEB_URL"), "WSLENV should carry DSH vars");
 
