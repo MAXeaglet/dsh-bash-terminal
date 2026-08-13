@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8 (2026-08-14)
+
+- Test coverage: `shell` background execution registers a job with working `cancel` / `done` / `readOutput` hooks (13 apply/execute cases total).
+
 ## 0.3.7 (2026-08-14)
 
 - `terminal` tool: reads now wait for output to settle (quiet for 300ms, cap 5s) instead of a fixed delay, so `send` returns the COMPLETE reply (verified: full multi-line output, e.g. `seq 1 8`).

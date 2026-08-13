@@ -24,7 +24,7 @@ const ctx = {
   sandbox: {
     confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
-  get: (key) => key === "approval" ? { request: async () => "allowed-once" } : undefined,
+  get: (key) => key === "approval" ? { request: async () => "allowed-once" } : key === "jobs" ? { start: (spec) => { jobsStarted.push(spec); return "job-bg-1"; } } : undefined,
   effect: () => () => {},
   subprocess: null
 };
@@ -35,6 +35,7 @@ assert.strictEqual(registered.parameters.properties.shell, undefined, "model-fac
 
 // ---- mock subprocess + execute() ----
 const spawnCalls = [];
+const jobsStarted = [];
 const fakeHandle = {
   collected: {
     stdout: { readFrom: () => ({ text: "mock-out", lossy: false, nextOffset: 1 }) },
@@ -137,6 +138,21 @@ const realConfine = ctx.sandbox.confine;
 ctx.sandbox.confine = () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
 await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec), /no sandbox backend/);
 ctx.sandbox.confine = realConfine;
+
+// 13) background execution registers a job with working hooks
+userDefaultShell = "powershell";
+sandboxMode = "danger-full-access";
+spawnCalls.length = 0;
+const bg = await registered.execute({ command: "sleep 1", description: "t", run_in_background: true }, exec);
+assert.strictEqual(bg.kind, "background");
+assert.strictEqual(bg.jobId, "job-bg-1");
+assert.strictEqual(jobsStarted.length, 1);
+assert.strictEqual(jobsStarted[0].kind, "shell/powershell");
+const bgHooks = jobsStarted[0].run();
+assert.strictEqual(typeof bgHooks.cancel, "function");
+assert.ok(bgHooks.done instanceof Promise);
+assert.strictEqual(typeof bgHooks.readOutput, "function");
+assert.ok(spawnCalls.length >= 1, "background spawned");
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
