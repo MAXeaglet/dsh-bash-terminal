@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+package-lock.json
+
+# build output (regenerate with: node scripts/build-client.mjs)
+# dist/client.js is committed for out-of-the-box installs; uncomment to ignore:
+# dist/
+
+# scratch
+*.log
+.DS_Store
