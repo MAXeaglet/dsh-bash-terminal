@@ -69,7 +69,27 @@ if ($Action -eq "install") {
   Write-Host "[3/4] patch dsh-host-apiproxy settings allowlist ..."
   Set-ApiProxyAllowlist
 
-  Write-Host "[4/4] append mount row to cordis.patch.yml ..."
+  Write-Host "[4/5] migrate to official bundle install (dsh.bundle) ..."
+  $profilePkg = Join-Path $profileDir "package.json"
+  if (Test-Path $profilePkg) {
+    $pkg = Get-Content $profilePkg -Raw | ConvertFrom-Json
+    $bundles = @($pkg.dsh.profile.bundles)
+    if ($bundles -contains "dsh-bash-terminal") {
+      Write-Host "  profile already lists dsh-bash-terminal bundle."
+    } else {
+      $bundles += "dsh-bash-terminal"
+      $pkg.dsh.profile.bundles = @($bundles | Sort-Object -Unique)
+      # PS 5.1 Set-Content -Encoding UTF8 writes a BOM, which breaks JSON.parse;
+      # write without BOM via .NET.
+      $json = $pkg | ConvertTo-Json -Depth 6
+      [System.IO.File]::WriteAllText($profilePkg, $json, (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  added dsh-bash-terminal to dsh.profile.bundles (no BOM)."
+    }
+  } else {
+    Write-Host "  WARN: $profilePkg not found; add dsh-bash-terminal to dsh.profile.bundles manually." -ForegroundColor Yellow
+  }
+
+  Write-Host "[5/5] append mount row to cordis.patch.yml (legacy fallback) ..."
   if (Test-Path $patchFile) {
     $content = Get-Content $patchFile -Raw
     if ($content -notmatch "dsh-bash-terminal") {
