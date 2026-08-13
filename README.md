@@ -1,5 +1,7 @@
 # dsh-bash-terminal
 
+> 🌐 [English](README.en.md)
+
 ![test](https://github.com/MAXeaglet/dsh-bash-terminal/actions/workflows/test.yml/badge.svg)
 
 DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一执行 **PowerShell / Git Bash / WSL** 三种终端命令。
