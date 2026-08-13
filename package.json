@@ -1,6 +1,6 @@
 {
   "name": "dsh-bash-terminal",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "DSH plugin: one shell tool that runs commands through PowerShell, Git Bash, or WSL on Windows, with a user-chosen default terminal in the Web UI settings.",
   "author": "MAXeaglet",
   "license": "MIT",
@@ -42,13 +42,17 @@
     "src",
     "scripts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build:client": "node scripts/build-client.mjs",
     "test": "node test/unit.mjs && node test/apply.mjs && node test/client.mjs"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,

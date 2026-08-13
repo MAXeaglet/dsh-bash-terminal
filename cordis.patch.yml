@@ -1,0 +1,5 @@
+# dsh-bash-terminal bundle layer — applied automatically when a profile lists
+# this package in dsh.profile.bundles (dsh.bundle.patch declaration).
+- insert:
+    - id: tool-bash-terminal
+      name: 'dsh-bash-terminal'

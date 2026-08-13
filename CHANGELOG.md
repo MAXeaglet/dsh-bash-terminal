@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9 (2026-08-14)
+
+- **Official bundle manifest**: the package now declares `dsh.bundle.patch` (ships its own `cordis.patch.yml`); a profile listing `dsh-bash-terminal` in `dsh.profile.bundles` auto-applies the mount — verified via a temp profile + `--dump-config` (entry appears without any manual profile patch).
+
 ## 0.3.8 (2026-08-14)
 
 - Test coverage: `shell` background execution registers a job with working `cancel` / `done` / `readOutput` hooks (13 apply/execute cases total).
