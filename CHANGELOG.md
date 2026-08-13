@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 (2026-08-14)
+
+- Fail-closed test coverage (unavailable sandbox backend rejects the call).
+- README sandbox documentation.
+- GitHub Actions CI (unit / apply / client suites on windows-latest).
+
 ## 0.2.2 (2026-08-14)
 
 - **Official denial rendering**: a confined call whose stderr matches the runner's denial signatures reports `sandbox.denied: true` and the model-facing output carries the exact official markers — `[sandbox: file access denied under <mode> mode]` plus the same-turn escalation hint.
