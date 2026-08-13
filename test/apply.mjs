@@ -4,6 +4,7 @@ import assert from "node:assert";
 // ---- mock ctx for apply() ----
 let registered = null;
 let userDefaultShell = "powershell"; // what the user picked in the Web UI
+let sandboxMode = "danger-full-access"; // per-call sandbox policy mode
 const ctx = {
   logger: { info: () => {} },
   systemPrompt: { section: (s) => { assert.ok(s.name === "tool:bash-terminal"); } },
@@ -16,6 +17,12 @@ const ctx = {
       assert.deepStrictEqual(options.base, { defaultShell: "powershell" }, "settings base");
       return { get: () => ({ defaultShell: userDefaultShell }) };
     }
+  },
+  sandboxPolicy: {
+    resolve: () => ({ mode: sandboxMode, workspaceRoot: "D:/WorkSpace", sessionId: "s1" })
+  },
+  sandbox: {
+    confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
   get: () => undefined,
   subprocess: null
@@ -78,6 +85,34 @@ assert.ok(spawnCalls[0].signal, "has fused signal");
 // render output shape
 const rendered = registered.output.render({}, { kind: "foreground", stdout: { text: "hi", truncated: false }, stderr: { text: "", truncated: false }, exitCode: 0, signal: null, timedOut: false, timeoutMs: 1, aborted: false });
 assert.strictEqual(rendered[0].text, "hi");
+
+// 5) sandbox: danger-full-access -> no confine, no sandbox facts
+userDefaultShell = "powershell";
+sandboxMode = "danger-full-access";
+spawnCalls.length = 0;
+await registered.execute({ command: "x", description: "t" }, exec);
+assert.ok(!spawnCalls[0].argv.includes("sandbox-runner"), "no confine under danger-full-access");
+
+// 6) sandbox: read-only + powershell -> confine argv through ctx.sandbox
+sandboxMode = "read-only";
+spawnCalls.length = 0;
+const confined = await registered.execute({ command: "x", description: "t" }, exec);
+assert.strictEqual(spawnCalls[0].argv[0], "sandbox-runner", "confined argv first element is the runner");
+assert.deepStrictEqual(confined.sandbox, { mode: "read-only", enforcement: "full" });
+
+// 7) sandbox: read-only + wsl -> not confined (WSL isolation is the sandbox)
+sandboxMode = "read-only";
+userDefaultShell = "wsl";
+spawnCalls.length = 0;
+const wslConfined = await registered.execute({ command: "echo hi", description: "t" }, exec);
+assert.ok(!spawnCalls[0].argv.includes("sandbox-runner"), "wsl not confined");
+assert.strictEqual(wslConfined.sandbox.enforcement, "wsl-isolation");
+
+// 8) sandbox: read-only + gitbash -> confined
+userDefaultShell = "gitbash";
+spawnCalls.length = 0;
+await registered.execute({ command: "echo hi", description: "t" }, exec);
+assert.strictEqual(spawnCalls[0].argv[0], "sandbox-runner", "gitbash confined under read-only");
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
