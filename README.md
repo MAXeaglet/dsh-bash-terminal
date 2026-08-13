@@ -97,6 +97,17 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 | `gitBashPath` | 自动探测 | 固定 git bash.exe 路径 |
 | `wslPath` | 自动探测 | 固定 wsl.exe 路径 |
 
+## 发布（npm）
+
+npm 账号已启用 2FA 发布验证，需一次性验证码：
+
+```powershell
+cd D:\WorkSpace\projects\dsh-bash-terminal
+npm publish --otp <验证码>   # 验证码来自你的认证器
+```
+
+发布前先 `npm pack --dry-run` 检查内容、跑 `node scripts/build-client.mjs` 重建 client bundle。
+
 ## 卸载
 
 ```powershell
