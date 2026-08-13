@@ -25,6 +25,7 @@ const ctx = {
     confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
   get: (key) => key === "approval" ? { request: async () => "allowed-once" } : undefined,
+  effect: () => () => {},
   subprocess: null
 };
 apply(ctx, {});
