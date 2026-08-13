@@ -82,6 +82,14 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 - 默认终端 = WSL 时：`shell(command: "ls -la /mnt/d/WorkSpace")` 走 WSL；传 `distro: "Ubuntu"` 可指定发行版
 - 默认终端 = PowerShell 时：`shell(command: "Get-Process node")` 走 PowerShell
 
+## 模型使用示例
+
+- 一次性命令（默认终端）：`shell(command: "git status", description: "查看 git 状态")`
+- 跨轮保持状态（交互式）：`terminal(action: "open")` → 记下 `sessionId` → `terminal(action: "send", sessionId, input: "cd /d/project\n")` → `terminal(action: "send", sessionId, input: "npm run dev\n")` → `terminal(action: "close", sessionId)`
+- 中断正在运行的程序：`terminal(action: "signal", sessionId, signal: "SIGINT")`
+- 查看活动会话：`terminal(action: "list")`
+- 沙箱拒绝后升级：`shell(command: ..., sandbox_permissions: "workspace-write", justification: "...")`
+
 ## 配置
 
 **Web UI 设置**（推荐）：设置 → 通用 →「默认终端」。
