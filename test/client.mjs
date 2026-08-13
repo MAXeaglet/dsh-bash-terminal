@@ -4,6 +4,15 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import assert from "node:assert";
 const profileRequire = createRequire("C:/Users/10045/.dsh/profiles/web/package.json");
+function loadShared(name) {
+  // CI: react is installed into the project node_modules (npm install react --no-save);
+  // local dev: resolve from the profile dependency tree instead.
+  try {
+    return createRequire(import.meta.url)(name);
+  } catch {
+    return profileRequire(name);
+  }
+}
 
 // --- mock defineStore (shape mirrors dsh-client-runtime: { spec, create }) ---
 const mockDefineStore = (decl) => ({
@@ -55,7 +64,7 @@ globalThis.window = {
       assert.strictEqual(id, "dsh-bash-terminal");
       exported = factory((name) => {
         if (name === "@deepseek-ai/dsh-client-runtime/client") return { defineStore: mockDefineStore };
-        if (name === "react/jsx-runtime" || name === "react") return profileRequire(name);
+        if (name === "react/jsx-runtime" || name === "react") return loadShared(name);
         throw new Error("unexpected require: " + name);
       });
     }
