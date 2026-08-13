@@ -1,6 +1,6 @@
 {
   "name": "dsh-bash-terminal",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "DSH plugin: one shell tool that runs commands through PowerShell, Git Bash, or WSL on Windows, with a user-chosen default terminal in the Web UI settings.",
   "author": "MAXeaglet",
   "license": "MIT",

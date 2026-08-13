@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6 (2026-08-14)
+
+- Test coverage: `terminal` open-with-initial-command (immediate execution in a fresh shell) and the job hooks shape (cancel / done / readOutput) verified against a real node-pty session.
+
 ## 0.3.5 (2026-08-14)
 
 - `terminal` tool: buffer overflow is reported (`truncated` flag + "[terminal buffer overflowed; oldest output dropped]" notice) so a busy session never silently loses history.

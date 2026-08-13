@@ -86,6 +86,20 @@ const closed = await tool.execute({ action: "close", sessionId: opened.sessionId
 assert.strictEqual(closed.kind, "closed");
 await assert.rejects(() => tool.execute({ action: "send", sessionId: opened.sessionId, input: "x" }, exec), /not found|closed/);
 
+// open with an initial command: command runs immediately in the fresh shell
+defaultShell = "gitbash";
+const initOpened = await tool.execute({ action: "open", command: "echo INIT-OK" }, exec);
+await delay(1200);
+const initRead = await tool.execute({ action: "read", sessionId: initOpened.sessionId }, exec);
+assert.ok(initRead.output.includes("INIT-OK"), "initial command output visible: " + JSON.stringify(initRead.output.slice(-120)));
+await tool.execute({ action: "close", sessionId: initOpened.sessionId }, exec).catch(() => {});
+
+// job hooks shape: the registered job exposes cancel / done / readOutput
+const hooks = jobsStarted[0].run();
+assert.strictEqual(typeof hooks.cancel, "function");
+assert.ok(hooks.done instanceof Promise);
+assert.strictEqual(typeof hooks.readOutput, "function");
+
 // powershell backend interactive session.
 // Note: Windows PowerShell 5.1 cannot start inside a ConPTY (0x8009001d);
 // pwsh 7 works. The test tolerates the 5.1 failure and documents the limit.
