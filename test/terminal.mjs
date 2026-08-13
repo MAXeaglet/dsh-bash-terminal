@@ -33,10 +33,12 @@ function realPtyHandle(spec) {
 }
 
 const shellEnv = { collect: () => ({ DSH_WEB_URL: "http://x" }) };
+const jobsStarted = [];
 const ctx = {
   shellEnv,
   subprocess: { spawnTerminal: async (spec) => realPtyHandle(spec) },
-  effect: () => () => {}
+  effect: () => () => {},
+  get: (key) => key === "jobs" ? { start: (spec) => { jobsStarted.push(spec); return "job-session-1"; } } : undefined
 };
 const registry = createTerminalRegistry(ctx);
 const paths = { pwsh: "C:/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe", gitbash: "C:/Program Files/Git/bin/bash.exe", wsl: "C:/WINDOWS/System32/wsl.exe" };
@@ -56,6 +58,10 @@ assert.strictEqual(opened.kind, "open");
 assert.ok(opened.sessionId, "session id returned");
 assert.strictEqual(opened.shell, "gitbash");
 assert.ok(opened.pid > 0);
+assert.strictEqual(opened.jobId, "job-session-1", "session registered as a background job");
+assert.strictEqual(jobsStarted.length, 1);
+assert.strictEqual(jobsStarted[0].kind, "terminal/session");
+assert.strictEqual(typeof jobsStarted[0].run, "function");
 
 // session state persists across sends (cd then pwd)
 await delay(600);
@@ -79,6 +85,11 @@ assert.strictEqual(r5.kind, "session");
 const closed = await tool.execute({ action: "close", sessionId: opened.sessionId }, exec);
 assert.strictEqual(closed.kind, "closed");
 await assert.rejects(() => tool.execute({ action: "send", sessionId: opened.sessionId, input: "x" }, exec), /not found|closed/);
+
+// idle timeout: a session with a short idle window auto-closes
+const opened2 = await tool.execute({ action: "open", idleMs: 400 }, exec);
+await delay(900);
+await assert.rejects(() => tool.execute({ action: "send", sessionId: opened2.sessionId, input: "x" }, exec), /not found|closed/);
 
 // validation
 await assert.rejects(() => tool.execute({ action: "bogus" }, exec), /must be one of|invalid action/);

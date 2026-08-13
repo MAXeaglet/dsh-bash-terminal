@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-08-14)
+
+- Terminal sessions register with the generic jobs registry (jobId on open; `job_kill` / `job_output` work on them).
+- Idle timeout: sessions auto-close after 10 minutes without send/read/signal (configurable via `idleMs` on open) so abandoned PTYs never leak process trees.
+
 ## 0.3.0 (2026-08-14)
 
 - **Interactive terminal tool (`terminal`)**: persistent PTY sessions over the official `ctx.subprocess.spawnTerminal` seam (node-pty). Actions: `open` / `send` / `read` / `signal` (Ctrl+C etc.) / `close`. Shell state (cwd, variables, aliases) persists across calls; the backend follows the user's default terminal setting. Verified with a real node-pty interactive Git Bash session (cd + pwd + echo + SIGINT + close).
