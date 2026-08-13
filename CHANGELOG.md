@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 (2026-08-14)
+
+- `terminal` tool: WSL sessions now carry DSH_* environment variables via WSLENV, matching the `shell` tool.
+
 ## 0.3.3 (2026-08-14)
 
 - `terminal` tool: new `list` action enumerates live sessions (sessionId / shell / pid) for multi-session management.
