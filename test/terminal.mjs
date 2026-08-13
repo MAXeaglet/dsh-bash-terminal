@@ -86,6 +86,46 @@ const closed = await tool.execute({ action: "close", sessionId: opened.sessionId
 assert.strictEqual(closed.kind, "closed");
 await assert.rejects(() => tool.execute({ action: "send", sessionId: opened.sessionId, input: "x" }, exec), /not found|closed/);
 
+// powershell backend interactive session.
+// Note: Windows PowerShell 5.1 cannot start inside a ConPTY (0x8009001d);
+// pwsh 7 works. The test tolerates the 5.1 failure and documents the limit.
+defaultShell = "powershell";
+const psOpened = await tool.execute({ action: "open" }, exec);
+await delay(1000);
+const psOut = await tool.execute({ action: "send", sessionId: psOpened.sessionId, input: "Get-Location\r" }, exec);
+const psFailed = psOut.output.includes("8009001d") || psOut.output.includes("内部错误");
+if (psFailed) {
+  console.log("NOTE: Windows PowerShell 5.1 cannot start in a ConPTY (install pwsh 7 for interactive powershell); skipping assertion");
+} else {
+  assert.ok(psOut.output.length > 0, "powershell interactive responds: " + JSON.stringify(psOut.output.slice(-100)));
+  assert.ok(psOut.output.toLowerCase().includes("workspace") || psOut.output.includes("WorkSpace"), "powershell location visible");
+}
+await tool.execute({ action: "close", sessionId: psOpened.sessionId }, exec).catch(() => {});
+
+// wsl backend interactive session (WSL distro boot is slow; retry reads)
+defaultShell = "wsl";
+const wslOpened = await tool.execute({ action: "open" }, exec);
+await delay(4500);
+let wslOut = await tool.execute({ action: "send", sessionId: wslOpened.sessionId, input: "pwd\r" }, exec);
+if (!wslOut.output.includes("/mnt/")) {
+  await delay(1500);
+  wslOut = await tool.execute({ action: "read", sessionId: wslOpened.sessionId }, exec);
+}
+const wslFailed = wslOut.output.includes("0x8007072c") || wslOut.output.includes("RPC");
+if (wslFailed) {
+  console.log("NOTE: wsl.exe interactive under ConPTY hit a WSL service RPC error; one-shot -lc commands work, interactive may need a terminal emulator");
+} else {
+  assert.ok(wslOut.output.includes("/mnt/"), "wsl interactive responds with /mnt/ path: " + JSON.stringify(wslOut.output.slice(-150)));
+}
+await tool.execute({ action: "close", sessionId: wslOpened.sessionId }, exec).catch(() => {});
+
+// session cap: opening beyond MAX_SESSIONS refuses
+defaultShell = "gitbash";
+const capped = [];
+for (let i = 0; i < 8; i++) capped.push(await tool.execute({ action: "open" }, exec));
+await assert.rejects(() => tool.execute({ action: "open" }, exec), /too many open sessions/);
+for (const s of capped) await tool.execute({ action: "close", sessionId: s.sessionId }, exec);
+
 // idle timeout: a session with a short idle window auto-closes
 const opened2 = await tool.execute({ action: "open", idleMs: 400 }, exec);
 await delay(900);

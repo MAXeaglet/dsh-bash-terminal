@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 (2026-08-14)
+
+- Session cap: at most 8 concurrent terminal sessions (fail-fast beyond).
+- Multi-backend interactive verification: Git Bash (full), PowerShell 5.1 and wsl.exe documented ConPTY limits (0x8009001d / 0x8007072c; pwsh 7 and one-shot -lc work).
+- README (zh/en): interactive-terminal known limits.
+
 ## 0.3.1 (2026-08-14)
 
 - Terminal sessions register with the generic jobs registry (jobId on open; `job_kill` / `job_output` work on them).

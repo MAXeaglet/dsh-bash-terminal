@@ -130,6 +130,12 @@ Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" 
 不享受 `pwsh` 工具的 ConstrainedLanguage 限制。DSH 的文件操作工具（read/write/edit）仍受文件沙箱约束。
 仅在你信任的会话中使用；需要受沙箱保护的 PowerShell 时请继续使用官方 `pwsh` 工具。
 
+## 交互终端已知限制（ConPTY）
+
+- **PowerShell 5.1 无法在 ConPTY 启动**（0x8009001d）—— 交互式 PowerShell 需要安装 [PowerShell 7](https://github.com/PowerShell/PowerShell/releases)（一次性命令不受影响）。
+- **wsl.exe 交互模式在 ConPTY 下可能触发 WSL 服务 RPC 错误**（0x8007072c，偶发）—— 一次性 `wsl -e bash -lc ...` 命令正常；交互会话建议直接用 Windows Terminal / WSL 终端，或重试。
+- Git Bash 交互会话完全正常。
+
 ## 已知限制
 
 - WSL 后台进程在超时/中断后可能在发行版内短暂残留（WSL 实例在最后一个进程退出后自动关闭）。

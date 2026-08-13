@@ -42,6 +42,12 @@ For local development (junction install, source changes apply instantly) see the
 
 `terminal` actions: `open` (start a session on the configured default terminal), `send` (write input + read new output), `read`, `signal` (SIGINT = Ctrl+C etc.), `close`. State (cwd / variables / aliases) persists across calls; end input with `\\n`. Sessions are background jobs (`job_kill` works) and auto-close after 10 idle minutes (`idleMs` overrides on open).
 
+## Interactive terminal known limits (ConPTY)
+
+- **Windows PowerShell 5.1 cannot start in a ConPTY** (0x8009001d) — install [PowerShell 7](https://github.com/PowerShell/PowerShell/releases) for interactive PowerShell (one-shot commands are unaffected).
+- **wsl.exe interactive mode may hit a WSL service RPC error under ConPTY** (0x8007072c, intermittent) — one-shot `wsl -e bash -lc ...` works; for interactive WSL prefer a real terminal (Windows Terminal / WSL app) or retry.
+- Git Bash interactive sessions work fully.
+
 ## Config
 
 Web UI: Settings -> General -> Default terminal. Plugin row `config` overrides: `defaultShell`, `timeoutMs`, `maxTimeoutMs`, `pwshPath`, `gitBashPath`, `wslPath`.
