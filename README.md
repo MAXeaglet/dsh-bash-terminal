@@ -20,7 +20,20 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 
 ## 安装（web profile）
 
+### 标准安装（npm 发布后）
+
 ```powershell
+# 1. 安装插件包
+npm install -g dsh-bash-terminal          # 全局（或加入 profile 的依赖）
+dsh plugin --profile web add dsh-bash-terminal
+
+# 2. patch DSH 设置白名单（DSH 限制，见下方说明；install.ps1 可单独执行此步）
+powershell -ExecutionPolicy Bypass -File install.ps1 install
+
+# 3. 重启 dsh web
+```
+
+### 本地开发安装（junction 直连，改源码即时生效）
 # 1. 链接插件包到 profile 的 node_modules（junction，改源码即时生效）
 $profile = "$env:USERPROFILE\.dsh\profiles\web"
 New-Item -ItemType Junction -Path "$profile\node_modules\dsh-bash-terminal" -Target "D:\WorkSpace\projects\dsh-bash-terminal" | Out-Null
