@@ -24,7 +24,7 @@ const ctx = {
   sandbox: {
     confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
-  get: () => undefined,
+  get: (key) => key === "approval" ? { request: async () => "allowed-once" } : undefined,
   subprocess: null
 };
 apply(ctx, {});
@@ -113,6 +113,21 @@ userDefaultShell = "gitbash";
 spawnCalls.length = 0;
 await registered.execute({ command: "echo hi", description: "t" }, exec);
 assert.strictEqual(spawnCalls[0].argv[0], "sandbox-runner", "gitbash confined under read-only");
+
+// 9) sandbox escalation: sandbox_permissions + justification widens policy
+userDefaultShell = "powershell";
+sandboxMode = "read-only";
+spawnCalls.length = 0;
+const escalated = await registered.execute({ command: "x", description: "t", sandbox_permissions: "danger-full-access", justification: "need full access for the test" }, exec);
+assert.strictEqual(escalated.sandbox, undefined, "danger-full-access approved -> no confine");
+
+// 10) escalation pairing validation
+await assert.rejects(() => registered.execute({ command: "x", description: "t", sandbox_permissions: "workspace-write" }, exec), /justification/);
+await assert.rejects(() => registered.execute({ command: "x", description: "t", justification: "why" }, exec), /sandbox_permissions/);
+
+// 11) params advertise escalation modes
+assert.ok(registered.parameters.properties.sandbox_permissions, "sandbox_permissions advertised");
+assert.deepStrictEqual(registered.parameters.properties.sandbox_permissions.enum, ["workspace-write", "danger-full-access"]);
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
