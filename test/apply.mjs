@@ -98,7 +98,7 @@ sandboxMode = "read-only";
 spawnCalls.length = 0;
 const confined = await registered.execute({ command: "x", description: "t" }, exec);
 assert.strictEqual(spawnCalls[0].argv[0], "sandbox-runner", "confined argv first element is the runner");
-assert.deepStrictEqual(confined.sandbox, { mode: "read-only", enforcement: "full" });
+assert.deepStrictEqual(confined.sandbox, { mode: "read-only", enforcement: "full", denied: false });
 
 // 7) sandbox: read-only + wsl -> not confined (WSL isolation is the sandbox)
 sandboxMode = "read-only";
