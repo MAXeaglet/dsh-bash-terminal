@@ -144,6 +144,15 @@ assert.ok(listed.sessions.length >= 8, "list shows open sessions: " + listed.ses
 assert.ok(listed.sessions.every((s) => s.shell === "gitbash"));
 for (const s of capped) await tool.execute({ action: "close", sessionId: s.sessionId }, exec);
 
+// settle-based read returns the COMPLETE multi-line reply (not a fixed-delay slice)
+defaultShell = "gitbash";
+const settleOpened = await tool.execute({ action: "open" }, exec);
+await delay(600);
+const multiOut = await tool.execute({ action: "send", sessionId: settleOpened.sessionId, input: "seq 1 8\r" }, exec);
+const seen = (multiOut.output.match(/^[1-8]$/gm) || []).length;
+assert.ok(seen >= 7, "multi-line output settled fully (got " + seen + "/8): " + JSON.stringify(multiOut.output.slice(-160)));
+await tool.execute({ action: "close", sessionId: settleOpened.sessionId }, exec).catch(() => {});
+
 // idle timeout: a session with a short idle window auto-closes
 const opened2 = await tool.execute({ action: "open", idleMs: 400 }, exec);
 await delay(900);
