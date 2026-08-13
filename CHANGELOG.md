@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5 (2026-08-14)
+
+- `terminal` tool: buffer overflow is reported (`truncated` flag + "[terminal buffer overflowed; oldest output dropped]" notice) so a busy session never silently loses history.
+
 ## 0.3.4 (2026-08-14)
 
 - `terminal` tool: WSL sessions now carry DSH_* environment variables via WSLENV, matching the `shell` tool.
