@@ -1,5 +1,7 @@
 # dsh-bash-terminal
 
+![test](https://github.com/MAXeaglet/dsh-bash-terminal/actions/workflows/test.yml/badge.svg)
+
 DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一执行 **PowerShell / Git Bash / WSL** 三种终端命令。
 
 | 后端 | 实际执行 | 语法 / 路径 | 环境变量 |
@@ -99,6 +101,16 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" -Force
 # 并从 cordis.patch.yml 删掉 insert 块，重启 dsh web
 ```
+
+## 沙箱（官方机制对接）
+
+`shell` 工具走 DSH 官方沙箱接缝（`ctx.sandboxPolicy` + `ctx.sandbox`）：
+
+- 每次调用解析当前沙箱策略；`danger-full-access` 会话直接执行（不包装）。
+- PowerShell / Git Bash 后端经 `ctx.sandbox.confine` 包装 argv —— 与官方 executor 相同的 **fail-closed** 语义：请求受限模式但无可用后端时抛 `SandboxUnavailableError`，拒绝裸跑。
+- WSL 后端不包装：WSL 独立 Linux 虚拟机本身就是隔离（结果报告 `enforcement: wsl-isolation`）。
+- 受限模式下被沙箱拒绝时，结果携带官方标记 `[sandbox: file access denied under <mode> mode]` 与同轮升级提示；模型可凭 `sandbox_permissions` + `justification` 发起一次升级（经 `ctx.approval` 用户审批），与官方 bash/pwsh 工具完全一致。
+- 注意：DSH 的 Windows ACL 沙箱 launcher（`node-addon-landlock-run-win32-x64`）当前尚未在 npm 发布，本机沙箱后端暂不可用；架构已就绪，DSH 发布后自动生效。
 
 ## ⚠️ 安全说明
 

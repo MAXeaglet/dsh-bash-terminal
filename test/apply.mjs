@@ -129,6 +129,14 @@ await assert.rejects(() => registered.execute({ command: "x", description: "t", 
 assert.ok(registered.parameters.properties.sandbox_permissions, "sandbox_permissions advertised");
 assert.deepStrictEqual(registered.parameters.properties.sandbox_permissions.enum, ["workspace-write", "danger-full-access"]);
 
+// 12) fail-closed: sandbox backend unavailable -> SandboxUnavailableError-like rejection
+sandboxMode = "read-only";
+userDefaultShell = "gitbash";
+const realConfine = ctx.sandbox.confine;
+ctx.sandbox.confine = () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
+await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec), /no sandbox backend/);
+ctx.sandbox.confine = realConfine;
+
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
 

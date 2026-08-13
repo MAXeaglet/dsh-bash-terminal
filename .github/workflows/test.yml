@@ -1,0 +1,23 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps + build client bundle
+        run: npm install --no-audit --no-fund && node scripts/build-client.mjs
+      - name: Run unit tests
+        run: node test/unit.mjs
+      - name: Run apply/execute mock tests
+        run: node test/apply.mjs
+      - name: Run client logic tests
+        run: node test/client.mjs
