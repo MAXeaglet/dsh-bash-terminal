@@ -60,6 +60,7 @@ const exec = { signal: new AbortController().signal, agent: { session: { header:
 assert.deepStrictEqual(terminalArgv("gitbash", paths, undefined), ["C:/Program Files/Git/bin/bash.exe", "-i"]);
 assert.deepStrictEqual(terminalArgv("powershell", paths, undefined), ["C:/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe", "-NoLogo", "-NoProfile"]);
 assert.deepStrictEqual(terminalArgv("wsl", paths, "Ubuntu"), ["C:/WINDOWS/System32/wsl.exe", "-d", "Ubuntu", "-e", "bash", "-i"]);
+assert.deepStrictEqual(terminalArgv("wsl", paths, undefined), ["C:/WINDOWS/System32/wsl.exe", "--", "bash", "-i"]);
 
 // open a persistent git-bash session
 const opened = await tool.execute({ action: "open" }, exec);
@@ -72,8 +73,8 @@ assert.strictEqual(jobsStarted.length, 1);
 assert.strictEqual(jobsStarted[0].kind, "terminal/session");
 assert.strictEqual(typeof jobsStarted[0].run, "function");
 
-// session state persists across sends (cd then pwd)
-await delay(600);
+// session state persists across sends (cd then pwd); give bash -i time to be ready
+await delay(1200);
 const r1 = await tool.execute({ action: "send", sessionId: opened.sessionId, input: "cd /d/WorkSpace/projects\r" }, exec);
 assert.strictEqual(r1.kind, "session");
 const r2 = await tool.execute({ action: "send", sessionId: opened.sessionId, input: "pwd\r" }, exec);
