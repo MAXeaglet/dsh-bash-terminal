@@ -1,6 +1,6 @@
 # dsh-bash-terminal
 
-> 🌐 [English](README.en.md)
+> 🌐 [English](README.en.md) · 社区交流：[LINUX DO](https://linux.do) · [GitHub](https://github.com/MAXeaglet/dsh-bash-terminal)
 
 ![test](https://github.com/MAXeaglet/dsh-bash-terminal/actions/workflows/test.yml/badge.svg)
 

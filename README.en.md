@@ -1,5 +1,7 @@
 # dsh-bash-terminal
 
+> Community: [LINUX DO](https://linux.do) · [GitHub](https://github.com/MAXeaglet/dsh-bash-terminal)
+
 A DeepSeek Harness (DSH) plugin: one `shell` tool that runs commands through **PowerShell / Git Bash / WSL** on Windows, plus an **interactive terminal** tool — all following the terminal **you** choose in the Web UI settings.
 
 ![test](https://github.com/MAXeaglet/dsh-bash-terminal/actions/workflows/test.yml/badge.svg)
