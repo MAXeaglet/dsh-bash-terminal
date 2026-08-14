@@ -55,47 +55,51 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
   const writable = useStore((s) => s.writable);
   const [open, setOpen] = (0, import_react.useState)(false);
   const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "div",
-    {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        padding: "12px 0"
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 500, lineHeight: "22px", color: "var(--dsw-alias-label-primary, inherit)" }, children: t("shell.title") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, lineHeight: "18px", opacity: 0.65 }, children: t("shell.description") })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          import_dsh_client_ui_primitives.Menu,
-          {
-            open,
-            anchor: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              import_dsh_client_ui_primitives.Button,
+  return (
+    // Follows the shipped General-section row grammar (cf. the Appearance row):
+    // column stack, 1px bottom hairline, 16px vertical padding, 14px/400 title.
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      "div",
+      {
+        style: {
+          borderBottom: "1px solid var(--dsw-alias-border-l2)",
+          flexDirection: "column",
+          gap: 8,
+          padding: "16px 0",
+          display: "flex"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { color: "var(--dsw-alias-label-primary)", fontSize: 14, fontWeight: 400, lineHeight: "22px" }, children: t("shell.title") }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, lineHeight: "18px", opacity: 0.65, flex: 1 }, children: t("shell.description") }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              import_dsh_client_ui_primitives.Menu,
               {
-                size: "sm",
-                variant: "outline",
-                icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.IconCodeOutline16, {}),
-                disabled: !writable,
-                onClick: () => setOpen(true),
-                children: t("shell." + shell)
+                open,
+                anchor: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  import_dsh_client_ui_primitives.Button,
+                  {
+                    size: "sm",
+                    variant: "outline",
+                    icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.IconCodeOutline16, {}),
+                    disabled: !writable,
+                    onClick: () => setOpen(true),
+                    children: t("shell." + shell)
+                  }
+                ),
+                items,
+                selectedId: shell,
+                onSelect: (id) => {
+                  setShell(id);
+                  setOpen(false);
+                },
+                onClose: () => setOpen(false)
               }
-            ),
-            items,
-            selectedId: shell,
-            onSelect: (id) => {
-              setShell(id);
-              setOpen(false);
-            },
-            onClose: () => setOpen(false)
-          }
-        )
-      ]
-    }
+            )
+          ] })
+        ]
+      }
+    )
   );
 }
 function apply(ctx) {

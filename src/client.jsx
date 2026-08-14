@@ -34,42 +34,44 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
   const [open, setOpen] = useState(false);
   const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
   return (
+    // Follows the shipped General-section row grammar (cf. the Appearance row):
+    // column stack, 1px bottom hairline, 16px vertical padding, 14px/400 title.
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        padding: "12px 0"
+        borderBottom: "1px solid var(--dsw-alias-border-l2)",
+        flexDirection: "column",
+        gap: 8,
+        padding: "16px 0",
+        display: "flex"
       }}
     >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, lineHeight: "22px", color: "var(--dsw-alias-label-primary, inherit)" }}>
-          {t("shell.title")}
-        </div>
-        <div style={{ fontSize: 12, lineHeight: "18px", opacity: 0.65 }}>{t("shell.description")}</div>
+      <div style={{ color: "var(--dsw-alias-label-primary)", fontSize: 14, fontWeight: 400, lineHeight: "22px" }}>
+        {t("shell.title")}
       </div>
-      <Menu
-        open={open}
-        anchor={
-          <Button
-            size="sm"
-            variant="outline"
-            icon={<IconCodeOutline16 />}
-            disabled={!writable}
-            onClick={() => setOpen(true)}
-          >
-            {t("shell." + shell)}
-          </Button>
-        }
-        items={items}
-        selectedId={shell}
-        onSelect={(id) => {
-          setShell(id);
-          setOpen(false);
-        }}
-        onClose={() => setOpen(false)}
-      />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+        <div style={{ fontSize: 12, lineHeight: "18px", opacity: 0.65, flex: 1 }}>{t("shell.description")}</div>
+        <Menu
+          open={open}
+          anchor={
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<IconCodeOutline16 />}
+              disabled={!writable}
+              onClick={() => setOpen(true)}
+            >
+              {t("shell." + shell)}
+            </Button>
+          }
+          items={items}
+          selectedId={shell}
+          onSelect={(id) => {
+            setShell(id);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      </div>
     </div>
   );
 }
