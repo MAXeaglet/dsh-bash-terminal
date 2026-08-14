@@ -69,9 +69,8 @@ globalThis.window = {
           const React = loadShared("react");
           const el = (tag) => (props) => React.createElement(tag, props, props.children);
           return {
-            Button: el("button"),
             Menu: (props) => React.createElement("div", null, props.anchor),
-            IconCodeOutline16: () => null
+            IconChevronDownOutline14: () => null
           };
         }
         throw new Error("unexpected require: " + name);
@@ -124,7 +123,9 @@ const fakeUseStore = (sel) => { selectors.push(sel(renderState)); return selecto
 const t = (k) => ({ "shell.title": "默认终端", "shell.powershell": "PowerShell", "shell.gitbash": "Git Bash", "shell.wsl": "WSL" }[k] ?? k);
 const html = renderToString(loadShared("react").createElement(Component, { t, useStore: fakeUseStore, setShell: injected.setShell }));
 assert.ok(html.includes("默认终端"), "row renders the title");
-assert.ok(html.includes("WSL"), "button shows the current shell label");
+assert.ok(!html.includes("AI 无法更改"), "removed the 'AI cannot change' phrase");
+assert.ok(html.includes("WSL"), "selector shows the current shell label");
+assert.ok(html.includes("btSelector"), "selector uses the official capsule class");
 assert.deepStrictEqual(selectors, ["wsl", true], "component reads shell + writable from store");
 
 // settings change -> bound actions sync again (subscribe callback fires push)

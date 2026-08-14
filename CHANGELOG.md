@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.14 (2026-08-14)
+
+- Settings row now mirrors the shipped EnterBehaviorRow exactly: row layout (title + tertiary description left, capsule selector right), 36px capsule trigger (`--dsw-alias-bg-module-platform`, 18px radius, hover state) with a chevron, `align="end"` portal Menu. CSS injected the same way as first-party rows.
+- Removed the "(由你决定，AI 无法更改)" description phrase.
+
 ## 0.3.13 (2026-08-14)
 
 - Settings row follows the shipped General-section row grammar (column stack, 1px bottom hairline via `--dsw-alias-border-l2`, 16px vertical padding, 14px/400 title) — matches the Appearance row's layout.

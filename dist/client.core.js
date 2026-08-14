@@ -30,16 +30,24 @@ var import_jsx_runtime = require("react/jsx-runtime");
 var SETTINGS_NS = "settings.bash-terminal";
 var SETTINGS_NAMESPACE = "bash-terminal";
 var SHELLS = ["powershell", "gitbash", "wsl"];
+var ROW_CSS = ".btRow{border-bottom:1px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}.btRowText{flex-direction:column;flex:1;gap:4px;min-width:0;padding-right:48px;display:flex}.btTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}.btDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px}.btSelector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex}.btSelector:hover{background:var(--dsw-alias-interactive-bg-hover)}.btChevron{flex:none}";
+if (typeof document !== "undefined" && document.querySelector('style[data-plugin-css="bash-terminal-row"]') === null) {
+  const tag = document.createElement("style");
+  tag.dataset.plugin = "dsh-bash-terminal";
+  tag.dataset.pluginCss = "bash-terminal-row";
+  tag.textContent = ROW_CSS;
+  document.head.appendChild(tag);
+}
 var zh = {
   "shell.title": "\u9ED8\u8BA4\u7EC8\u7AEF",
-  "shell.description": "shell \u5DE5\u5177\u6267\u884C\u547D\u4EE4\u65F6\u4F7F\u7528\u7684\u7EC8\u7AEF\uFF08\u7531\u4F60\u51B3\u5B9A\uFF0CAI \u65E0\u6CD5\u66F4\u6539\uFF09",
+  "shell.description": "shell \u5DE5\u5177\u6267\u884C\u547D\u4EE4\u65F6\u4F7F\u7528\u7684\u7EC8\u7AEF",
   "shell.powershell": "PowerShell",
   "shell.gitbash": "Git Bash",
   "shell.wsl": "WSL"
 };
 var en = {
   "shell.title": "Default terminal",
-  "shell.description": "Terminal used by the shell tool (you control this; the AI cannot change it)",
+  "shell.description": "Terminal used by the shell tool",
   "shell.powershell": "PowerShell",
   "shell.gitbash": "Git Bash",
   "shell.wsl": "WSL"
@@ -50,52 +58,43 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
   const writable = useStore((s) => s.writable);
   const [open, setOpen] = (0, import_react.useState)(false);
   const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
-  return (
-    // Follows the shipped General-section row grammar (cf. the Appearance row):
-    // column stack, 1px bottom hairline, 16px vertical padding, 14px/400 title.
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-      "div",
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "btRow", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "btRowText", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "btTitle", children: t("shell.title") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "btDesc", children: t("shell.description") })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      import_dsh_client_ui_primitives.Menu,
       {
-        style: {
-          borderBottom: "1px solid var(--dsw-alias-border-l2)",
-          flexDirection: "column",
-          gap: 8,
-          padding: "16px 0",
-          display: "flex"
+        open,
+        onClose: () => setOpen(false),
+        items,
+        selectedId: shell,
+        onSelect: (id) => {
+          setOpen(false);
+          setShell(id);
         },
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { color: "var(--dsw-alias-label-primary)", fontSize: 14, fontWeight: 400, lineHeight: "22px" }, children: t("shell.title") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, lineHeight: "18px", opacity: 0.65, flex: 1 }, children: t("shell.description") }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              import_dsh_client_ui_primitives.Menu,
-              {
-                open,
-                anchor: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  import_dsh_client_ui_primitives.Button,
-                  {
-                    size: "sm",
-                    variant: "outline",
-                    icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.IconCodeOutline16, {}),
-                    disabled: !writable,
-                    onClick: () => setOpen(true),
-                    children: t("shell." + shell)
-                  }
-                ),
-                items,
-                selectedId: shell,
-                onSelect: (id) => {
-                  setShell(id);
-                  setOpen(false);
-                },
-                onClose: () => setOpen(false)
-              }
-            )
-          ] })
-        ]
+        align: "end",
+        portal: true,
+        anchor: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: "btSelector",
+            "aria-haspopup": "menu",
+            "aria-expanded": open,
+            disabled: !writable,
+            onClick: () => setOpen(!open),
+            style: !writable ? { opacity: 0.5, cursor: "not-allowed" } : void 0,
+            children: [
+              t("shell." + shell),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.IconChevronDownOutline14, { className: "btChevron" })
+            ]
+          }
+        )
       }
     )
-  );
+  ] });
 }
 function apply(ctx) {
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), "bash-terminal: settings dictionaries");
