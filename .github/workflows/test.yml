@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: 22
       - name: Install deps + build client bundle
-        run: npm install --no-audit --no-fund && npm install react@^18 node-pty@^1 --no-save && node scripts/build-client.mjs
+        run: npm install --no-audit --no-fund && npm install react@^18 react-dom@^18 node-pty@^1 --no-save && node scripts/build-client.mjs
       - name: Run unit tests
         run: node test/unit.mjs
       - name: Run apply/execute mock tests

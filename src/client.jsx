@@ -1,11 +1,15 @@
 // dsh-bash-terminal client plugin: a "Default terminal" preference row in the
-// Web UI General settings. The user picks powershell / gitbash / wsl; the host
-// shell tool obeys that choice (the model cannot change it).
+// Web UI General settings, rendered with DSH-native primitives (Menu + Button
+// + icon) so it feels like a first-party setting. The user picks
+// powershell / gitbash / wsl; the host shell tool obeys that choice.
 
+import { useState } from "react";
 import { defineStore } from "@deepseek-ai/dsh-client-runtime/client";
+import { Button, IconCodeOutline16, Menu } from "@deepseek-ai/dsh-client-ui-primitives";
 
 const SETTINGS_NS = "settings.bash-terminal";
 const SETTINGS_NAMESPACE = "bash-terminal";
+const SHELLS = ["powershell", "gitbash", "wsl"];
 
 const zh = {
   "shell.title": "默认终端",
@@ -27,6 +31,8 @@ export const inject = ["slots", "locale", "settingsScope"];
 function ShellPreferenceRow({ t, useStore, setShell }) {
   const shell = useStore((s) => s.shell);
   const writable = useStore((s) => s.writable);
+  const [open, setOpen] = useState(false);
+  const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
   return (
     <div
       style={{
@@ -43,26 +49,27 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
         </div>
         <div style={{ fontSize: 12, lineHeight: "18px", opacity: 0.65 }}>{t("shell.description")}</div>
       </div>
-      <select
-        value={shell}
-        disabled={!writable}
-        onChange={(e) => setShell(e.target.value)}
-        style={{
-          fontSize: 14,
-          padding: "6px 10px",
-          borderRadius: 8,
-          border: "1px solid var(--dsw-alias-line-strong, #ccc)",
-          background: "var(--dsw-alias-bg-layer-2, #fff)",
-          color: "var(--dsw-alias-label-primary, inherit)",
-          outline: "none",
-          cursor: writable ? "pointer" : "not-allowed",
-          maxWidth: 180
+      <Menu
+        open={open}
+        anchor={
+          <Button
+            size="sm"
+            variant="outline"
+            icon={<IconCodeOutline16 />}
+            disabled={!writable}
+            onClick={() => setOpen(true)}
+          >
+            {t("shell." + shell)}
+          </Button>
+        }
+        items={items}
+        selectedId={shell}
+        onSelect={(id) => {
+          setShell(id);
+          setOpen(false);
         }}
-      >
-        <option value="powershell">{t("shell.powershell")}</option>
-        <option value="gitbash">{t("shell.gitbash")}</option>
-        <option value="wsl">{t("shell.wsl")}</option>
-      </select>
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }

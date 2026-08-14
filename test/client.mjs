@@ -64,7 +64,16 @@ globalThis.window = {
       assert.strictEqual(id, "dsh-bash-terminal");
       exported = factory((name) => {
         if (name === "@deepseek-ai/dsh-client-runtime/client") return { defineStore: mockDefineStore };
-        if (name === "react/jsx-runtime" || name === "react") return loadShared(name);
+        if (name === "react/jsx-runtime" || name === "react" || name === "react-dom/server") return loadShared(name);
+        if (name === "@deepseek-ai/dsh-client-ui-primitives") {
+          const React = loadShared("react");
+          const el = (tag) => (props) => React.createElement(tag, props, props.children);
+          return {
+            Button: el("button"),
+            Menu: (props) => React.createElement("div", null, props.anchor),
+            IconCodeOutline16: () => null
+          };
+        }
         throw new Error("unexpected require: " + name);
       });
     }
@@ -107,13 +116,15 @@ assert.deepStrictEqual(lastSync, ["gitbash", 3, true], "initial snapshot pushed 
 injected.setShell("wsl");
 assert.deepStrictEqual(setCalls, [{ field: "defaultShell", value: "wsl" }]);
 
-// row component renders a select reflecting the store value
+// row component renders through real React (DSH-native Menu/Button are mocked)
+const { renderToString } = loadShared("react-dom/server");
 const renderState = { shell: "wsl", revision: 3, writable: true };
 const selectors = [];
 const fakeUseStore = (sel) => { selectors.push(sel(renderState)); return selectors[selectors.length - 1]; };
 const t = (k) => ({ "shell.title": "默认终端", "shell.powershell": "PowerShell", "shell.gitbash": "Git Bash", "shell.wsl": "WSL" }[k] ?? k);
-const html = Component({ t, useStore: fakeUseStore, setShell: injected.setShell });
-assert.ok(html && typeof html === "object", "component rendered");
+const html = renderToString(loadShared("react").createElement(Component, { t, useStore: fakeUseStore, setShell: injected.setShell }));
+assert.ok(html.includes("默认终端"), "row renders the title");
+assert.ok(html.includes("WSL"), "button shows the current shell label");
 assert.deepStrictEqual(selectors, ["wsl", true], "component reads shell + writable from store");
 
 // settings change -> bound actions sync again (subscribe callback fires push)

@@ -157,8 +157,13 @@ for (const s of capped) await tool.execute({ action: "close", sessionId: s.sessi
 // settle-based read returns the COMPLETE multi-line reply (not a fixed-delay slice)
 defaultShell = "gitbash";
 const settleOpened = await tool.execute({ action: "open" }, exec);
-await delay(600);
-const multiOut = await tool.execute({ action: "send", sessionId: settleOpened.sessionId, input: "seq 1 8\r" }, exec);
+await delay(1500);
+let multiOut = await tool.execute({ action: "send", sessionId: settleOpened.sessionId, input: "seq 1 8\r" }, exec);
+if (!(multiOut.output.match(/^[1-8]$/gm) || []).length) {
+  // git-bash may not have been ready for the first write; retry once
+  await delay(800);
+  multiOut = await tool.execute({ action: "send", sessionId: settleOpened.sessionId, input: "seq 1 8\r" }, exec);
+}
 const seen = (multiOut.output.match(/^[1-8]$/gm) || []).length;
 assert.ok(seen >= 7, "multi-line output settled fully (got " + seen + "/8): " + JSON.stringify(multiOut.output.slice(-160)));
 await tool.execute({ action: "close", sessionId: settleOpened.sessionId }, exec).catch(() => {});

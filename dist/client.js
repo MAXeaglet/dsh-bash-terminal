@@ -28,10 +28,13 @@ __export(client_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(client_exports);
+var import_react = require("react");
 var import_client = require("@deepseek-ai/dsh-client-runtime/client");
+var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 var import_jsx_runtime = require("react/jsx-runtime");
 var SETTINGS_NS = "settings.bash-terminal";
 var SETTINGS_NAMESPACE = "bash-terminal";
+var SHELLS = ["powershell", "gitbash", "wsl"];
 var zh = {
   "shell.title": "\u9ED8\u8BA4\u7EC8\u7AEF",
   "shell.description": "shell \u5DE5\u5177\u6267\u884C\u547D\u4EE4\u65F6\u4F7F\u7528\u7684\u7EC8\u7AEF\uFF08\u7531\u4F60\u51B3\u5B9A\uFF0CAI \u65E0\u6CD5\u66F4\u6539\uFF09",
@@ -50,6 +53,8 @@ var inject = ["slots", "locale", "settingsScope"];
 function ShellPreferenceRow({ t, useStore, setShell }) {
   const shell = useStore((s) => s.shell);
   const writable = useStore((s) => s.writable);
+  const [open, setOpen] = (0, import_react.useState)(false);
+  const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "div",
     {
@@ -65,28 +70,28 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 500, lineHeight: "22px", color: "var(--dsw-alias-label-primary, inherit)" }, children: t("shell.title") }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, lineHeight: "18px", opacity: 0.65 }, children: t("shell.description") })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "select",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          import_dsh_client_ui_primitives.Menu,
           {
-            value: shell,
-            disabled: !writable,
-            onChange: (e) => setShell(e.target.value),
-            style: {
-              fontSize: 14,
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid var(--dsw-alias-line-strong, #ccc)",
-              background: "var(--dsw-alias-bg-layer-2, #fff)",
-              color: "var(--dsw-alias-label-primary, inherit)",
-              outline: "none",
-              cursor: writable ? "pointer" : "not-allowed",
-              maxWidth: 180
+            open,
+            anchor: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              import_dsh_client_ui_primitives.Button,
+              {
+                size: "sm",
+                variant: "outline",
+                icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.IconCodeOutline16, {}),
+                disabled: !writable,
+                onClick: () => setOpen(true),
+                children: t("shell." + shell)
+              }
+            ),
+            items,
+            selectedId: shell,
+            onSelect: (id) => {
+              setShell(id);
+              setOpen(false);
             },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "powershell", children: t("shell.powershell") }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "gitbash", children: t("shell.gitbash") }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "wsl", children: t("shell.wsl") })
-            ]
+            onClose: () => setOpen(false)
           }
         )
       ]
