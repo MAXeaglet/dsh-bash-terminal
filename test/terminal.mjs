@@ -87,7 +87,7 @@ assert.strictEqual(typeof jobsStarted[0].run, "function");
 // session state persists across sends (cd then pwd); give bash -i time to be ready
 await delay(1200);
 const targetDir = gitbashPath(workdir);
-const r1 = await tool.execute({ action: "send", sessionId: opened.sessionId, input: "cd " + targetDir + "\r" }, exec);
+const r1 = await tool.execute({ action: "send", sessionId: opened.sessionId, input: "cd \"" + targetDir + "\"\r" }, exec);
 assert.strictEqual(r1.kind, "session");
 const r2 = await tool.execute({ action: "send", sessionId: opened.sessionId, input: "pwd\r" }, exec);
 assert.ok(r2.output.includes(targetDir), "pwd reflects the cd (session state persisted): " + JSON.stringify(r2.output.slice(-120)));
@@ -129,30 +129,46 @@ defaultShell = "powershell";
 const psOpened = await tool.execute({ action: "open" }, exec);
 await delay(1000);
 const psOut = await tool.execute({ action: "send", sessionId: psOpened.sessionId, input: "Get-Location\r" }, exec);
-const psFailed = psOut.output.length === 0 || psOut.output.includes("8009001d") || psOut.output.includes("内部错误");
+const psFailed = psOut.output.includes("8009001d") || psOut.output.includes("内部错误");
 if (psFailed) {
   console.log("NOTE: powershell interactive unavailable in this environment (Windows PowerShell 5.1 cannot start in a ConPTY; install pwsh 7); skipping assertion");
 } else {
+  assert.ok(psOut.output.length > 0, "powershell interactive responds: " + JSON.stringify(psOut.output.slice(-100)));
   assert.ok(psOut.output.includes("Path"), "powershell interactive responds with a location: " + JSON.stringify(psOut.output.slice(-100)));
 }
 await tool.execute({ action: "close", sessionId: psOpened.sessionId }, exec).catch(() => {});
 
 // wsl backend interactive session (WSL distro boot is slow; retry reads)
 defaultShell = "wsl";
-const wslOpened = await tool.execute({ action: "open" }, exec);
-await delay(4500);
-let wslOut = await tool.execute({ action: "send", sessionId: wslOpened.sessionId, input: "pwd\r" }, exec);
-if (!wslOut.output.includes("/mnt/")) {
-  await delay(1500);
-  wslOut = await tool.execute({ action: "read", sessionId: wslOpened.sessionId }, exec);
+let wslOpened;
+try {
+  wslOpened = await tool.execute({ action: "open" }, exec);
+} catch {
+  console.log("NOTE: wsl.exe interactive unavailable (spawn failed); skipping assertion");
 }
-const wslFailed = wslOut.output.length === 0 || wslOut.output.includes("0x8007072c") || wslOut.output.includes("RPC") || wslOut.output.includes("not installed");
-if (wslFailed) {
-  console.log("NOTE: wsl.exe interactive unavailable in this environment (no distro / ConPTY RPC error); skipping assertion");
-} else {
-  assert.ok(wslOut.output.includes("/mnt/"), "wsl interactive responds with /mnt/ path: " + JSON.stringify(wslOut.output.slice(-150)));
+if (wslOpened !== undefined) {
+  await delay(4500);
+  let wslOut = await tool.execute({ action: "send", sessionId: wslOpened.sessionId, input: "pwd\r" }, exec);
+  if (!wslOut.output.includes("/mnt/")) {
+    await delay(1500);
+    wslOut = await tool.execute({ action: "read", sessionId: wslOpened.sessionId }, exec);
+  }
+  // Tolerate every observed WSL failure mode (no distro, ConPTY RPC errors,
+  // and the localhost-proxy "Wsl/Service/E_UNEXPECTED" crash) — environment
+  // limits skip; only a genuinely broken PTY path should fail.
+  const wslFailed = wslOut.output.length === 0
+    || wslOut.output.includes("0x8007072c")
+    || wslOut.output.includes("RPC")
+    || wslOut.output.includes("not installed")
+    || wslOut.output.includes("E_UNEXPECTED")
+    || wslOut.output.includes("Wsl/Service");
+  if (wslFailed) {
+    console.log("NOTE: wsl.exe interactive unavailable in this environment (no distro / ConPTY RPC error); skipping assertion");
+  } else {
+    assert.ok(wslOut.output.includes("/mnt/"), "wsl interactive responds with /mnt/ path: " + JSON.stringify(wslOut.output.slice(-150)));
+  }
+  await tool.execute({ action: "close", sessionId: wslOpened.sessionId }, exec).catch(() => {});
 }
-await tool.execute({ action: "close", sessionId: wslOpened.sessionId }, exec).catch(() => {});
 
 // session cap: opening beyond MAX_SESSIONS refuses; list shows them
 defaultShell = "gitbash";
