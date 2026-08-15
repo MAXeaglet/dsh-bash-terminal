@@ -2,8 +2,10 @@
 // and exercise apply(ctx) with mocked slots/locale/settingsScope services.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
+import { join } from "node:path";
 import assert from "node:assert";
-const profileRequire = createRequire("C:/Users/10045/.dsh/profiles/web/package.json");
+const profileRequire = createRequire(join(os.homedir(), ".dsh", "profiles", "web", "package.json"));
 function loadShared(name) {
   // CI: react is installed into the project node_modules (npm install react --no-save);
   // local dev: resolve from the profile dependency tree instead.
