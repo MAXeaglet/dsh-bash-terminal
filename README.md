@@ -129,7 +129,7 @@ Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" 
 
 ## 交互式终端（terminal 工具）
 
-`terminal` 工具在官方 PTY 接缝（`ctx.subprocess.spawnTerminal`，node-pty）上提供**持久交互会话**：
+`terminal` 工具在 PTY 接缝（node-pty；Windows 上因上游 `spawnTerminal` 的 process inspector 仅支持 POSIX，由 `lib/terminal.js` 直连 node-pty，非 Windows 仍走官方 `ctx.subprocess.spawnTerminal`）上提供**持久交互会话**：
 
 - `action: open` 启动一个真实终端会话（按你设置的默认终端；wsl 可传 `distro`），返回 `sessionId`
 - `action: send` 写入输入并读新输出；`action: read` 只读不写；`action: signal` 向前台进程组发信号（SIGINT = Ctrl+C）
@@ -150,14 +150,13 @@ Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" 
 
 ## ⚠️ 安全说明
 
-`shell` 工具的命令**在 DSH 沙箱之外**运行，与 dsh 进程同权限（等同完整访问的命令执行），
-不享受 `pwsh` 工具的 ConstrainedLanguage 限制。DSH 的文件操作工具（read/write/edit）仍受文件沙箱约束。
-仅在你信任的会话中使用；需要受沙箱保护的 PowerShell 时请继续使用官方 `pwsh` 工具。
+`shell` 工具的受限模式会经 `ctx.sandbox.confine` 包装（fail-closed），但它是**额外的多终端入口**，不享受官方 `pwsh` 工具的 ConstrainedLanguage 限制；`danger-full-access` 下与 dsh 进程同权限。DSH 的文件操作工具（read/write/edit）仍受文件沙箱约束。仅在你信任的会话中使用；需要受沙箱保护的 PowerShell 时请继续使用官方 `pwsh` 工具。
 
 ## 交互终端已知限制（ConPTY）
 
 - **PowerShell 5.1 无法在 ConPTY 启动**（0x8009001d）—— 交互式 PowerShell 需要安装 [PowerShell 7](https://github.com/PowerShell/PowerShell/releases)（一次性命令不受影响）。
 - **wsl.exe 交互模式在 ConPTY 下可能触发 WSL 服务 RPC 错误**（0x8007072c，偶发）—— 一次性 `wsl -e bash -lc ...` 命令正常；交互会话建议直接用 Windows Terminal / WSL 终端，或重试。
+- **Windows 上 node-pty 不接受命名信号**：`signal` 的 `SIGINT` 映射为 Ctrl+C（`\x03`），其他信号（`SIGTERM` / `SIGKILL` / `SIGTSTP` / `SIGHUP`）退化为终止会话。
 - Git Bash 交互会话完全正常。
 
 ## 已知限制

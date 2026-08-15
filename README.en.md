@@ -16,7 +16,7 @@ A DeepSeek Harness (DSH) plugin: one `shell` tool that runs commands through **P
 
 - **User decides, the AI cannot override**: pick the default terminal in Settings -> General -> Default terminal (PowerShell / Git Bash / WSL). The setting persists through the DSH settings system; the `shell` tool always obeys it.
 - **Official sandbox seam**: the `shell` tool resolves the DSH sandbox policy per call and confines PowerShell / Git Bash argv through `ctx.sandbox` — same fail-closed `SandboxUnavailableError` semantics as the shipped executors. WSL runs unconfined (its Linux-VM isolation IS the sandbox). Official `sandbox_permissions` / `justification` escalation and denial markers included.
-- **Interactive terminal**: the `terminal` tool opens persistent real-PTY sessions over the official `ctx.subprocess.spawnTerminal` seam (node-pty). Actions `open` / `send` / `read` / `signal` / `close`; shell state persists across calls; sessions are managed as background jobs and auto-close when idle.
+- **Interactive terminal**: the `terminal` tool opens persistent real-PTY sessions over node-pty — on non-Windows via the official `ctx.subprocess.spawnTerminal` seam, on Windows directly through node-pty because the upstream seam's process inspector is POSIX-only. Actions `open` / `send` / `read` / `signal` / `close`; shell state persists across calls; sessions are managed as background jobs and auto-close when idle.
 - **Background execution** via the generic jobs registry (`run_in_background` / `job_output` / `job_kill`).
 
 ## Install
@@ -50,6 +50,7 @@ For local development (junction install, source changes apply instantly) see the
 
 - **Windows PowerShell 5.1 cannot start in a ConPTY** (0x8009001d) — install [PowerShell 7](https://github.com/PowerShell/PowerShell/releases) for interactive PowerShell (one-shot commands are unaffected).
 - **wsl.exe interactive mode may hit a WSL service RPC error under ConPTY** (0x8007072c, intermittent) — one-shot `wsl -e bash -lc ...` works; for interactive WSL prefer a real terminal (Windows Terminal / WSL app) or retry.
+- **node-pty accepts no named signals on Windows**: `signal` maps `SIGINT` to Ctrl+C (`\x03`); other signals (`SIGTERM` / `SIGKILL` / `SIGTSTP` / `SIGHUP`) degrade to terminating the session.
 - Git Bash interactive sessions work fully.
 
 ## Config

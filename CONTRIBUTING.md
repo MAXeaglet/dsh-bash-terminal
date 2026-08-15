@@ -28,7 +28,7 @@ node test/terminal.mjs          # 真实 node-pty 交互会话（gitbash）
 - 依赖走 `inject` 声明；注册副作用用 `ctx.effect` 返回 disposer
 - 无全局可变状态（会话/缓冲在插件闭包）
 - 进程派生走 `ctx.subprocess`；沙箱走 `ctx.sandbox` + `ctx.sandboxPolicy`（fail-closed）
-- 交互终端走 `ctx.subprocess.spawnTerminal`（node-pty）
+- 交互终端走 PTY 接缝：非 Windows 用 `ctx.subprocess.spawnTerminal`；Windows 因上游 process inspector 仅支持 POSIX，临时直连 node-pty（`lib/terminal.js` 的 `spawnPtyHandle`）
 - 后台/会话管理走通用 jobs registry
 
 ## 提交流程
