@@ -5,10 +5,12 @@ import assert from "node:assert";
 let registered = null;
 let userDefaultShell = "powershell"; // what the user picked in the Web UI
 let sandboxMode = "danger-full-access"; // per-call sandbox policy mode
+let assembleHandler = null; // captured system-prompt/assemble waterfall listener
 const ctx = {
   logger: { info: () => {} },
   systemPrompt: { section: (s) => { assert.ok(s.name === "tool:bash-terminal"); } },
   tools: { register: (tool) => { registered = tool; } },
+  on: (event, handler) => { if (event === "system-prompt/assemble") assembleHandler = handler; },
   shellEnv: { collect: () => ({ DSH_WEB_URL: "http://127.0.0.1:3080" }) },
   settings: {
     register: (ns, schema, options) => {
@@ -161,5 +163,33 @@ await assert.rejects(() => registered.execute({ command: "", description: "t" },
 // settings schema rejects an out-of-enum user value
 userDefaultShell = "fish";
 await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec));
+
+// ---- system-prompt/assemble: description re-renders with the user's shell ----
+
+assert.ok(assembleHandler, "assemble waterfall listener registered");
+const makeAssembly = () => ({
+  tools: [
+    { name: "shell", description: "stale-description" },
+    { name: "read", description: "read a file" }
+  ],
+  sections: [],
+  contexts: []
+});
+
+// gitbash user setting -> bash-flavored description for the shell tool only.
+userDefaultShell = "gitbash";
+const gitAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
+assert.ok(gitAssembly.tools[0].description.includes("bash -lc"), "gitbash description applied");
+assert.ok(gitAssembly.tools[0].description.includes("is gitbash"), "gitbash backend named");
+assert.strictEqual(gitAssembly.tools[1].description, "read a file", "other tools untouched");
+
+// Hot-reload: switching the setting re-renders on the next assembly.
+userDefaultShell = "powershell";
+const psAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
+assert.ok(psAssembly.tools[0].description.includes("pwsh -NoLogo"), "powershell description applied after setting change");
+assert.ok(!psAssembly.tools[0].description.includes("bash -lc"), "stale gitbash description gone");
+
+// Registration-time description already matches the initial setting.
+assert.ok(registered.description.includes("is powershell"), "registration-time description matches initial default");
 
 console.log("APPLY/EXECUTE MOCK TESTS PASSED");

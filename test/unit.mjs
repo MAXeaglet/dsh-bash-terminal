@@ -1,6 +1,6 @@
 
 import { buildArgv, buildEnv, candidateGitBashPaths, candidatePwshPaths, internals } from "../lib/index.js";
-const { renderResult, resolveAllPaths, validateArgs } = internals;
+const { renderResult, resolveAllPaths, validateArgs, toolDescription, SHELL_DESCRIPTIONS } = internals;
 import assert from "node:assert";
 
 const paths = { pwsh: "C:\\pwsh.exe", gitbash: "C:\\Git\\bin\\bash.exe", wsl: "C:\\Windows\\System32\\wsl.exe" };
@@ -37,5 +37,39 @@ assert.throws(() => validateArgs({ command: "  ", description: "x" }));
 // shell is user-settings controlled: a stale shell arg must be tolerated
 validateArgs({ command: "ls", description: "x", shell: "fish" });
 assert.throws(() => validateArgs({ command: "ls", description: "x", timeoutMs: -5 }));
+
+// ---- backend-aware tool description -----------------------------------------
+
+// Every backend is covered by its own lead sentence.
+assert.deepStrictEqual(Object.keys(SHELL_DESCRIPTIONS).sort(), ["gitbash", "powershell", "wsl"]);
+
+// gitbash -> bash-flavored description; the active backend is named up front.
+const gitDesc = toolDescription(true, "gitbash");
+assert.ok(gitDesc.includes("bash -lc"), "gitbash lead mentions bash -lc: " + gitDesc);
+assert.ok(gitDesc.includes("POSIX syntax"), "gitbash lead mentions POSIX");
+assert.ok(gitDesc.includes("The user's chosen default terminal (Settings -> General -> Default terminal) is gitbash"), "gitbash names the active backend");
+
+// powershell -> PowerShell-flavored description.
+const psDesc = toolDescription(true, "powershell");
+assert.ok(psDesc.includes("pwsh -NoLogo -NoProfile -NonInteractive -Command"), "powershell lead mentions pwsh argv");
+assert.ok(psDesc.includes("PowerShell syntax"), "powershell lead mentions PowerShell");
+assert.ok(psDesc.includes("is powershell"), "powershell names the active backend");
+
+// wsl -> Linux-bash-flavored description.
+const wslDesc = toolDescription(true, "wsl");
+assert.ok(wslDesc.includes("wsl [-d <distro>] -e bash -lc"), "wsl lead mentions wsl argv");
+assert.ok(wslDesc.includes("/mnt/"), "wsl lead mentions /mnt/ paths");
+assert.ok(wslDesc.includes("is wsl"), "wsl names the active backend");
+
+// Shared tail: fresh shell, exit codes, background controls.
+for (const desc of [gitDesc, psDesc, wslDesc]) {
+  assert.ok(desc.includes("spawns a fresh shell"), "shared fresh-shell tail");
+  assert.ok(desc.includes("[exit code: N]"), "shared exit-code tail");
+  assert.ok(desc.includes("run_in_background: true"), "background advertised when enabled");
+}
+assert.ok(!toolDescription(false, "gitbash").includes("run_in_background"), "background hidden when disabled");
+
+// Unknown backend falls back to the default lead without throwing.
+assert.ok(toolDescription(true, "fish").includes("is powershell"), "unknown backend falls back to default");
 
 console.log("ALL UNIT TESTS PASSED");
