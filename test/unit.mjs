@@ -66,6 +66,8 @@ for (const desc of [gitDesc, psDesc, wslDesc]) {
   assert.ok(desc.includes("spawns a fresh shell"), "shared fresh-shell tail");
   assert.ok(desc.includes("[exit code: N]"), "shared exit-code tail");
   assert.ok(desc.includes("run_in_background: true"), "background advertised when enabled");
+  assert.ok(desc.includes("under the DSH sandbox"), "sandbox honored in description");
+  assert.ok(!desc.includes("outside the DSH sandbox"), "no stale outside-sandbox claim");
 }
 assert.ok(!toolDescription(false, "gitbash").includes("run_in_background"), "background hidden when disabled");
 
