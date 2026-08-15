@@ -47,7 +47,7 @@
   ],
   "scripts": {
     "build:client": "node scripts/build-client.mjs",
-    "test": "node test/unit.mjs && node test/apply.mjs && node test/client.mjs"
+    "test": "node test/unit.mjs && node test/apply.mjs && node test/client.mjs && node test/terminal.mjs"
   },
   "dsh": {
     "bundle": {
@@ -79,7 +79,8 @@
     "react": "^18.2.0"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
