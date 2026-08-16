@@ -49,7 +49,7 @@ New-Item -ItemType Junction -Path "$profile\node_modules\dsh-bash-terminal" -Tar
 # 2. 让插件能解析 @deepseek-ai/* 依赖（junction 到 profile 的依赖树）
 New-Item -ItemType Junction -Path "D:\WorkSpace\projects\dsh-bash-terminal\node_modules\@deepseek-ai" -Target "$profile\..\node_modules\@deepseek-ai" | Out-Null
 
-# 3. 在 cordis.patch.yml 追加挂载行（见下方 patch 片段）
+# 3. 让 profile 通过官方 bundle 挂载插件（install.ps1 install 会自动做；等价于在 dsh.profile.bundles 加 "dsh-bash-terminal"）
 # 4. （仅修改前端源码后）重新打包 client bundle:
 #    cd D:\WorkSpace\projects\dsh-bash-terminal && node scripts/build-client.mjs
 # 5. 让设置 UI 接受本插件的设置写入（DSH 限制，见下方说明）
@@ -62,13 +62,7 @@ New-Item -ItemType Junction -Path "D:\WorkSpace\projects\dsh-bash-terminal\node_
 > install.ps1 会自动 patch 该白名单（加入 `bash-terminal`，先备份原文件）。
 > **升级 DSH 后需重新运行 install.ps1** 恢复 patch。卸载时 install.ps1 会还原。
 
-`cordis.patch.yml` 追加：
-
-```yaml
-- insert:
-    - id: tool-bash-terminal
-      name: 'dsh-bash-terminal'
-```
+> 当前已不再需要手动改 profile 的 `cordis.patch.yml`：插件包内自带 `dsh.bundle.patch`（包内 `cordis.patch.yml`），只要 profile 的 `dsh.profile.bundles` 里有 `dsh-bash-terminal`，DSH 就会自动挂载。
 
 验证组合树（无需重启）：
 
@@ -122,10 +116,15 @@ npm publish --otp <验证码>   # 验证码来自你的认证器
 
 ## 卸载
 
+推荐直接运行：
+
 ```powershell
-Remove-Item "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-bash-terminal" -Force
-# 并从 cordis.patch.yml 删掉 insert 块，重启 dsh web
+powershell -ExecutionPolicy Bypass -File install.ps1 uninstall
 ```
+
+它会删除 junction、恢复设置白名单、清理旧版遗留的 `cordis.patch.yml` 挂载块，并从 `dsh.profile.bundles` 移除 `dsh-bash-terminal`。之后重启 dsh web 即可。
+
+手动卸载时，除了删除 `node_modules\dsh-bash-terminal`，还要记得从 profile `package.json` 的 `dsh.profile.bundles` 中移除 `dsh-bash-terminal`。
 
 ## 交互式终端（terminal 工具）
 

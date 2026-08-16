@@ -1,22 +1,32 @@
-# dsh-bash-terminal - one-click install/uninstall for the web profile.
-# Usage:  powershell -ExecutionPolicy Bypass -File install.ps1 [install|uninstall]
+# dsh-bash-terminal - install/uninstall for a DSH profile.
+# Usage:  powershell -ExecutionPolicy Bypass -File install.ps1 [install|uninstall] [-ProfileDir <path>]
+#
+# This script supports local source installs (it links the current checkout
+# into the profile's node_modules). DSH's official bundle mechanism is used for
+# mounting, so the profile's cordis.patch.yml is intentionally NOT modified on
+# install anymore.
 
-param([ValidateSet("install", "uninstall")][string]$Action = "install")
+param(
+  [ValidateSet("install", "uninstall")]
+  [string]$Action = "install",
+  [string]$ProfileDir = ""
+)
 
 $ErrorActionPreference = "Stop"
-$pluginDir = "D:\WorkSpace\projects\dsh-bash-terminal"
-$profileDir = Join-Path $env:USERPROFILE ".dsh\profiles\web"
+$pluginDir = $PSScriptRoot
+$profileDir = if ($ProfileDir) { $ProfileDir } else { Join-Path $env:USERPROFILE ".dsh\profiles\web" }
 $pluginLink = Join-Path $profileDir "node_modules\dsh-bash-terminal"
 $depLink = Join-Path $pluginDir "node_modules\@deepseek-ai"
-$patchFile = Join-Path $profileDir "cordis.patch.yml"
-$patchBlock = @'
-# ================= dsh-bash-terminal =================
-- insert:
-    - id: tool-bash-terminal
-      name: 'dsh-bash-terminal'
-'@
+
+function Ensure-ParentDirectory($path) {
+  $parent = Split-Path $path -Parent
+  if ($parent -and -not (Test-Path $parent)) {
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+  }
+}
 
 function New-Junction($path, $target) {
+  Ensure-ParentDirectory $path
   if (Test-Path $path) { Remove-Item $path -Force -Recurse }
   New-Item -ItemType Junction -Path $path -Target $target | Out-Null
   Write-Host "  linked: $path -> $target"
@@ -69,7 +79,7 @@ if ($Action -eq "install") {
   Write-Host "[3/4] patch dsh-host-apiproxy settings allowlist ..."
   Set-ApiProxyAllowlist
 
-  Write-Host "[4/5] migrate to official bundle install (dsh.bundle) ..."
+  Write-Host "[4/4] migrate to official bundle install (dsh.bundle) ..."
   $profilePkg = Join-Path $profileDir "package.json"
   if (Test-Path $profilePkg) {
     $pkg = Get-Content $profilePkg -Raw | ConvertFrom-Json
@@ -89,19 +99,6 @@ if ($Action -eq "install") {
     Write-Host "  WARN: $profilePkg not found; add dsh-bash-terminal to dsh.profile.bundles manually." -ForegroundColor Yellow
   }
 
-  Write-Host "[5/5] append mount row to cordis.patch.yml (legacy fallback) ..."
-  if (Test-Path $patchFile) {
-    $content = Get-Content $patchFile -Raw
-    if ($content -notmatch "dsh-bash-terminal") {
-      Add-Content -Path $patchFile -Value ($patchBlock -replace "\r?\n$", "") -Encoding UTF8
-      Write-Host "  patch appended: $patchFile"
-    } else {
-      Write-Host "  patch already contains dsh-bash-terminal, skip."
-    }
-  } else {
-    Write-Host "  WARN: $patchFile not found - add the mount row manually." -ForegroundColor Yellow
-  }
-
   Write-Host ""
   Write-Host "Done! Restart dsh web for the plugin to take effect:"
   Write-Host "  1) close the running dsh web (Ctrl+C or kill the process)"
@@ -109,24 +106,47 @@ if ($Action -eq "install") {
   Write-Host "After restart, open Settings -> General: a 'Default terminal' dropdown"
   Write-Host "(PowerShell / Git Bash / WSL) appears; the shell tool obeys it."
 } else {
-  Write-Host "[1/3] remove links ..."
+  Write-Host "[1/4] remove links ..."
   if (Test-Path $pluginLink) { Remove-Item $pluginLink -Force -Recurse; Write-Host "  removed: $pluginLink" }
   if (Test-Path $depLink) { Remove-Item $depLink -Force -Recurse; Write-Host "  removed: $depLink" }
 
-  Write-Host "[2/3] restore dsh-host-apiproxy allowlist ..."
+  Write-Host "[2/4] restore dsh-host-apiproxy allowlist ..."
   Restore-ApiProxyAllowlist
 
-  Write-Host "[3/3] remove mount block from cordis.patch.yml ..."
+  Write-Host "[3/4] clean legacy mount block from cordis.patch.yml (older installs) ..."
+  $patchFile = Join-Path $profileDir "cordis.patch.yml"
   if (Test-Path $patchFile) {
     $content = Get-Content $patchFile -Raw
     $pattern = "(?s)[ \t]*# =+ dsh-bash-terminal =+.*?\n- insert:\n    - id: tool-bash-terminal\n      name: 'dsh-bash-terminal'\n*"
     if ($content -match $pattern) {
       $content = $content -replace $pattern, ""
-      Set-Content -Path $patchFile -Value $content -Encoding UTF8
-      Write-Host "  patch block removed."
+      if ([string]::IsNullOrWhiteSpace($content)) {
+        $content = "[]"
+      }
+      [System.IO.File]::WriteAllText($patchFile, $content, (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  legacy patch block removed."
     } else {
-      Write-Host "  no dsh-bash-terminal block found in patch."
+      Write-Host "  no legacy dsh-bash-terminal block found in patch."
     }
   }
+
+  Write-Host "[4/4] remove dsh-bash-terminal from profile bundles ..."
+  $profilePkg = Join-Path $profileDir "package.json"
+  if (Test-Path $profilePkg) {
+    $pkg = Get-Content $profilePkg -Raw | ConvertFrom-Json
+    $bundles = @($pkg.dsh.profile.bundles)
+    if ($bundles -contains "dsh-bash-terminal") {
+      $bundles = @($bundles | Where-Object { $_ -ne "dsh-bash-terminal" })
+      $pkg.dsh.profile.bundles = $bundles
+      $json = $pkg | ConvertTo-Json -Depth 6
+      [System.IO.File]::WriteAllText($profilePkg, $json, (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host "  removed dsh-bash-terminal from dsh.profile.bundles."
+    } else {
+      Write-Host "  dsh-bash-terminal not in dsh.profile.bundles."
+    }
+  } else {
+    Write-Host "  WARN: $profilePkg not found; remove dsh-bash-terminal from dsh.profile.bundles manually." -ForegroundColor Yellow
+  }
+
   Write-Host "Uninstalled. Restart dsh web; the shell tool disappears."
 }
