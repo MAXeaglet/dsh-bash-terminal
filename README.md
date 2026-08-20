@@ -20,7 +20,7 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 - **不占用 `ctx.shell` 能力接缝**：DSH 自带的沙箱化 `pwsh` 工具保持原样可用；本插件的 `shell` 工具是**额外的**多终端入口。
 - 通过共享的 `ctx.subprocess` seam 派生进程：进程树终止（Windows `taskkill /T`）、SIGTERM→grace→SIGKILL、输出 spill 文件，与官方 `dsh-tool-bash` / `dsh-tool-pwsh` 行为一致。
 - 后台任务注册进通用 `jobs` registry，支持 `run_in_background` / `job_output` / `job_kill`。
-- 工具参数 `shell` 是枚举（UI 自动渲染为下拉），模型每次调用自行选择终端。
+- 前端设置页的「默认终端」是枚举（UI 自动渲染为下拉），模型每次调用都只按该设置执行，无法自行切换终端。
 
 ## 安装（web profile）
 
@@ -42,6 +42,8 @@ powershell -ExecutionPolicy Bypass -File install.ps1 install
 > 已用临时 profile 实测：`bundles: [dsh-bash-terminal]` → dump-config 自动出现 `tool-bash-terminal` entry。
 
 ### 本地开发安装（junction 直连，改源码即时生效）
+
+```powershell
 # 1. 链接插件包到 profile 的 node_modules（junction，改源码即时生效）
 $profile = "$env:USERPROFILE\.dsh\profiles\web"
 New-Item -ItemType Junction -Path "$profile\node_modules\dsh-bash-terminal" -Target "D:\WorkSpace\projects\dsh-bash-terminal" | Out-Null
