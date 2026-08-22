@@ -15,7 +15,7 @@ A DeepSeek Harness (DSH) plugin: one `shell` tool that runs commands through **P
 | `wsl` | `wsl [-d <distro>] -e bash -lc <cmd>` | Linux; `/mnt/d/...` | `$NAME` (via WSLENV) |
 
 - **User decides, the AI cannot override**: pick the default terminal in Settings -> General -> Default terminal (PowerShell / Git Bash / WSL). The setting persists through the DSH settings system; the `shell` tool always obeys it.
-- **Official sandbox seam**: the `shell` tool resolves the DSH sandbox policy per call and confines PowerShell / Git Bash argv through `ctx.sandbox` — same fail-closed `SandboxUnavailableError` semantics as the shipped executors. WSL runs unconfined (its Linux-VM isolation IS the sandbox). Official `sandbox_permissions` / `justification` escalation and denial markers included.
+- **Official sandbox seam**: the `shell` tool resolves the DSH sandbox policy per call and confines PowerShell argv through `ctx.sandbox` — same fail-closed `SandboxUnavailableError` semantics as the shipped executors. Git Bash and WSL run unconfined: WSL is its own Linux VM, while Git Bash cannot run under the DSH Windows ACL restricted-token runner (Cygwin/MSYS2 aborts with `CreateFileMapping` Win32 error 5). Official `sandbox_permissions` / `justification` escalation and denial markers included.
 - **Interactive terminal**: the `terminal` tool opens persistent real-PTY sessions over node-pty — on non-Windows via the official `ctx.subprocess.spawnTerminal` seam, on Windows directly through node-pty because the upstream seam's process inspector is POSIX-only. Actions `open` / `send` / `read` / `signal` / `close`; shell state persists across calls; sessions are managed as background jobs and auto-close when idle.
 - **Background execution** via the generic jobs registry (`run_in_background` / `job_output` / `job_kill`).
 
@@ -37,10 +37,11 @@ For local development (junction install, source changes apply instantly) see the
 ## Sandbox
 
 - `danger-full-access` sessions run directly (no wrapping).
-- Confined sessions wrap PowerShell / Git Bash argv through `ctx.sandbox.confine`; fail-closed when no backend is available.
+- Confined sessions wrap PowerShell argv through `ctx.sandbox.confine`; fail-closed when no backend is available.
+- Git Bash is never wrapped: the Windows ACL restricted-token runner cannot host Cygwin/MSYS2 (`CreateFileMapping` Win32 error 5); results report `enforcement: gitbash-unconfined`.
 - WSL is never wrapped (its VM isolation is the sandbox; results report `enforcement: wsl-isolation`).
 - Denied calls render the official `[sandbox: file access denied under <mode> mode]` marker plus a same-turn escalation hint; the model may retry once with `sandbox_permissions` + `justification` (user-approved via `ctx.approval`).
-- Note: DSH's Windows ACL sandbox launcher (`node-addon-landlock-run-win32-x64`) is not yet published on npm; the integration is architecture-ready and activates automatically when DSH ships it.
+- Note: when DSH's Windows ACL runner is available, it confines PowerShell; Git Bash remains unconfined due to the Cygwin/MSYS2 incompatibility.
 
 ## Interactive terminal
 

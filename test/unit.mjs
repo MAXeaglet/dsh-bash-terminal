@@ -48,6 +48,8 @@ const gitDesc = toolDescription(true, "gitbash");
 assert.ok(gitDesc.includes("bash -lc"), "gitbash lead mentions bash -lc: " + gitDesc);
 assert.ok(gitDesc.includes("POSIX syntax"), "gitbash lead mentions POSIX");
 assert.ok(gitDesc.includes("The user's chosen default terminal (Settings -> General -> Default terminal) is gitbash"), "gitbash names the active backend");
+assert.ok(gitDesc.includes("Git Bash"), "gitbash mentions Git Bash unconfined");
+assert.ok(gitDesc.includes("run unconfined"), "gitbash description advertises unconfined execution");
 
 // powershell -> PowerShell-flavored description.
 const psDesc = toolDescription(true, "powershell");

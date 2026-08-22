@@ -113,11 +113,12 @@ const wslConfined = await registered.execute({ command: "echo hi", description: 
 assert.ok(!spawnCalls[0].argv.includes("sandbox-runner"), "wsl not confined");
 assert.strictEqual(wslConfined.sandbox.enforcement, "wsl-isolation");
 
-// 8) sandbox: read-only + gitbash -> confined
+// 8) sandbox: read-only + gitbash -> not confined (Windows ACL cannot host Cygwin)
 userDefaultShell = "gitbash";
 spawnCalls.length = 0;
-await registered.execute({ command: "echo hi", description: "t" }, exec);
-assert.strictEqual(spawnCalls[0].argv[0], "sandbox-runner", "gitbash confined under read-only");
+const gitConfined = await registered.execute({ command: "echo hi", description: "t" }, exec);
+assert.ok(!spawnCalls[0].argv.includes("sandbox-runner"), "gitbash not confined under read-only");
+assert.strictEqual(gitConfined.sandbox.enforcement, "gitbash-unconfined");
 
 // 9) sandbox escalation: sandbox_permissions + justification widens policy
 userDefaultShell = "powershell";
@@ -136,7 +137,7 @@ assert.deepStrictEqual(registered.parameters.properties.sandbox_permissions.enum
 
 // 12) fail-closed: sandbox backend unavailable -> SandboxUnavailableError-like rejection
 sandboxMode = "read-only";
-userDefaultShell = "gitbash";
+userDefaultShell = "powershell";
 const realConfine = ctx.sandbox.confine;
 ctx.sandbox.confine = () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
 await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec), /no sandbox backend/);

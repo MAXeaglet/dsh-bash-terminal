@@ -68,11 +68,14 @@
 - `ctx.sandbox.confine(argv, policy)` → `{ argv: [...runner, "--", ...argv], enforcement, denialSignatures, runnerFailureRules }`
 - 语义：`danger-full-access` 不包装；受限模式 **fail-closed**（后端不可用抛
   `SandboxUnavailableError`，拒绝裸跑 —— 与官方 executor 一致）。
+- 例外：Git Bash 因 Cygwin/MSYS2 与 Windows ACL 受限令牌不兼容（`CreateFileMapping`
+  Win32 error 5），在本插件中与 WSL 一样不经过 `ctx.sandbox.confine` 包装；
+  结果报告 `enforcement: gitbash-unconfined`。
 - 升级契约：`sandbox_permissions`（enum `ESCALATION_TARGETS`）+ `justification`，
   经 `approveEscalation`（`ctx.approval`）严格宽化校验；被拒时渲染官方标记
   `[sandbox: file access denied under <mode> mode]` + 升级提示。
 - Windows 后端 = ACL restricted-token launcher（`node-addon-landlock-run-win32-x64`）——
-  **尚未发布**（只有 Linux）；架构就绪即可，DSH 发布后自动生效。
+  可用时负责 PowerShell 的受限包装；Git Bash 因 Cygwin/MSYS2 不兼容保持不包装。
 
 ### 3. Subprocess / PTY
 
