@@ -33,7 +33,7 @@
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./dist/client.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "files": [

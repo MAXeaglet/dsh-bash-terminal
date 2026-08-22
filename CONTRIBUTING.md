@@ -6,7 +6,7 @@
 
 ```powershell
 cd D:\WorkSpace\projects\dsh-bash-terminal
-node scripts/build-client.mjs   # 前端设置项 bundle → dist/client.js
+node scripts/build-client.mjs   # 前端设置项 bundle → lib/client.js
 node test/unit.mjs              # 纯函数单测
 node test/apply.mjs             # apply/execute mock 集成
 node test/client.mjs            # client 插件逻辑
@@ -19,7 +19,7 @@ node test/terminal.mjs          # 真实 node-pty 交互会话（gitbash）
 
 - `lib/index.js` — host 插件：`shell` 工具、settings 注册、沙箱对接（confine / escalation / denial）、`terminal` 工具接线
 - `lib/terminal.js` — 交互式终端：registry（会话/缓冲/空闲超时）+ 工具（open/send/read/signal/close/list）
-- `src/client.jsx` — client 插件：设置页「默认终端」下拉（esbuild 打包 → `dist/client.js`）
+- `src/client.jsx` — client 插件：设置页「默认终端」下拉（esbuild 打包 → `lib/client.js`）
 - `cordis.patch.yml` — 官方 `dsh.bundle` manifest（profile bundles 自动挂载）
 - `install.ps1` — 安装/卸载：junction 链接 + 依赖 + 白名单 patch + bundle 迁移
 

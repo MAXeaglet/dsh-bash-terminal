@@ -1,7 +1,8 @@
 // Build the browser client bundle for dsh-bash-terminal.
-// Output: dist/client.js — a __ModuleLoader__.load({ id, factory }) wrapper
-// around the esbuild CJS bundle; shared deps (react, @deepseek-ai/*) resolve
-// through the loader's require.
+// Output: lib/client.js (primary, consumed by DSH loader/reload precheck) and
+// dist/client.js (legacy compatibility) — a __ModuleLoader__.load({ id, factory })
+// wrapper around the esbuild CJS bundle; shared deps (react, @deepseek-ai/*)
+// resolve through the loader's require.
 
 import { build } from "esbuild";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -10,6 +11,7 @@ import { dirname, join } from "node:path";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 mkdirSync(join(root, "dist"), { recursive: true });
+mkdirSync(join(root, "lib"), { recursive: true });
 
 await build({
   entryPoints: [join(root, "src", "client.jsx")],
@@ -33,5 +35,6 @@ ${core}
 	}
 });
 `;
+writeFileSync(join(root, "lib", "client.js"), wrapper);
 writeFileSync(join(root, "dist", "client.js"), wrapper);
-console.log("built dist/client.js (" + wrapper.length + " bytes)");
+console.log("built lib/client.js + dist/client.js (" + wrapper.length + " bytes)");

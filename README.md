@@ -174,5 +174,5 @@ cd D:\WorkSpace\projects\dsh-bash-terminal
 node test\unit.mjs    # 纯函数单测（路径解析/argv/env/渲染/校验）
 node test\apply.mjs   # apply + execute mock 集成测试（用户设置决定后端、workdir、WSLENV、超时）
 node test\client.mjs  # client 插件逻辑测试（slot 注册/初始快照/setShell 写透）
-node scripts/build-client.mjs  # 打包前端设置项 bundle → dist/client.js
+node scripts/build-client.mjs  # 打包前端设置项 bundle → lib/client.js
 ```

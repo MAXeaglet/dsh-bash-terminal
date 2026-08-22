@@ -1,4 +1,4 @@
-// Client plugin logic test: load dist/client.js under a mocked __ModuleLoader__
+// Client plugin logic test: load lib/client.js under a mocked __ModuleLoader__
 // and exercise apply(ctx) with mocked slots/locale/settingsScope services.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -57,7 +57,7 @@ const ctx = {
 };
 
 // --- load the built client bundle under a fake module loader ---
-const bundle = readFileSync(new URL("../dist/client.js", import.meta.url), "utf8");
+const bundle = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
 assert.ok(bundle.includes("window.__ModuleLoader__.load"), "bundle wrapped");
 let exported;
 globalThis.window = {
