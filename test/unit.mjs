@@ -44,6 +44,18 @@ const cgbApps = candidateGitBashPaths({
 });
 assert.ok(!cgbApps.some((p) => p.toLowerCase().includes("windowsapps")), "WindowsApps bash excluded");
 
+// ...but that exclusion matches path components, not substrings: a directory whose
+// name merely starts with "WindowsApps" is still a legitimate search root.
+const cgbNear = candidateGitBashPaths({
+  ...process.env,
+  LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local",
+  PATH: "C:\\Users\\tester\\AppData\\Local\\Microsoft\\WindowsAppsBackup;C:\\Program Files\\Git\\bin"
+});
+assert.ok(
+  cgbNear.some((p) => p.toLowerCase().includes("windowsappsbackup")),
+  "sibling of the WindowsApps store is not excluded"
+);
+
 // candidateExists accepts only a real, non-empty file: a 0-byte stub (what the
 // alias store exposes) and a directory must both be rejected.
 const stubDir = mkdtempSync(join(tmpdir(), "bash-terminal-unit-"));
