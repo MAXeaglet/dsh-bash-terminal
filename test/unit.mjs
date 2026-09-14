@@ -1,7 +1,10 @@
 
 import { buildArgv, buildEnv, candidateGitBashPaths, candidatePwshPaths, internals } from "../lib/index.js";
-const { renderResult, resolveAllPaths, validateArgs, toolDescription, SHELL_DESCRIPTIONS } = internals;
+const { candidateExists, renderResult, resolveAllPaths, validateArgs, toolDescription, SHELL_DESCRIPTIONS } = internals;
 import assert from "node:assert";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const paths = { pwsh: "C:\\pwsh.exe", gitbash: "C:\\Git\\bin\\bash.exe", wsl: "C:\\Windows\\System32\\wsl.exe" };
 assert.deepStrictEqual(buildArgv("powershell", "echo hi", paths), ["C:\\pwsh.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "echo hi"]);
@@ -31,6 +34,37 @@ assert.ok(real.wsl, "wsl should resolve");
 
 const cgb = candidateGitBashPaths({ ...process.env, PATH: "C:\\Windows\\System32;C:\\Program Files\\Git\\bin" });
 assert.ok(!cgb.some((p) => p.toLowerCase().includes("system32")), "system32 bash excluded");
+
+// The WindowsApps alias store holds 0-byte app-execution aliases; their bash.exe
+// forwards to WSL, never to Git Bash, so a PATH entry pointing at it is skipped too.
+const cgbApps = candidateGitBashPaths({
+  ...process.env,
+  LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local",
+  PATH: "C:\\Users\\tester\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Program Files\\Git\\bin"
+});
+assert.ok(!cgbApps.some((p) => p.toLowerCase().includes("windowsapps")), "WindowsApps bash excluded");
+
+// ...but that exclusion matches path components, not substrings: a directory whose
+// name merely starts with "WindowsApps" is still a legitimate search root.
+const cgbNear = candidateGitBashPaths({
+  ...process.env,
+  LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local",
+  PATH: "C:\\Users\\tester\\AppData\\Local\\Microsoft\\WindowsAppsBackup;C:\\Program Files\\Git\\bin"
+});
+assert.ok(
+  cgbNear.some((p) => p.toLowerCase().includes("windowsappsbackup")),
+  "sibling of the WindowsApps store is not excluded"
+);
+
+// candidateExists accepts only a real, non-empty file: a 0-byte stub (what the
+// alias store exposes) and a directory must both be rejected.
+const stubDir = mkdtempSync(join(tmpdir(), "bash-terminal-unit-"));
+const stubFile = join(stubDir, "bash.exe");
+writeFileSync(stubFile, "");
+assert.strictEqual(candidateExists(process.execPath), true, "real executable accepted");
+assert.strictEqual(candidateExists(stubFile), false, "0-byte file rejected");
+assert.strictEqual(candidateExists(stubDir), false, "directory rejected");
+assert.strictEqual(candidateExists(join(stubDir, "missing.exe")), false, "missing path rejected");
 
 validateArgs({ command: "ls", description: "list" });
 assert.throws(() => validateArgs({ command: "  ", description: "x" }));
