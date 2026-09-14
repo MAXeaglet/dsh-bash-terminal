@@ -16,11 +16,12 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 
 ## 设计要点
 
-- **终端由用户决定，AI 无法更改**：Web UI 设置页（设置 → 通用）出现"默认终端"下拉（PowerShell / Git Bash / WSL）；`shell` 工具永远只使用该设置，不暴露终端参数给模型。设置通过 DSH settings 系统持久化（settings.yaml）。
+- **终端由用户决定，AI 无法更改**：Web UI 设置页（设置 → 通用）有**两行**下拉 —— **Shell 工具默认终端**（`defaultShell`）与 **Terminal 工具默认终端**（`terminalShell`，选项含「跟随 Shell 工具默认」= 空值）：`shell` 工具读前者，交互式 `terminal` 工具读后者（未单独设置时跟随前者）。两者都不暴露终端参数给模型，并通过 DSH settings 系统持久化（settings.yaml）。
+- **为什么要分设**：非交互执行与交互会话的偏好常常不同 —— 例如 Windows 受限沙箱下 MSYS2/Git Bash 起不来（`CreateFileMapping` Win32 error 5），于是希望 `shell` 走 PowerShell，而交互式 `terminal` 仍开真 Git Bash。
 - **不占用 `ctx.shell` 能力接缝**：DSH 自带的沙箱化 `pwsh` 工具保持原样可用；本插件的 `shell` 工具是**额外的**多终端入口。
 - 通过共享的 `ctx.subprocess` seam 派生进程：进程树终止（Windows `taskkill /T`）、SIGTERM→grace→SIGKILL、输出 spill 文件，与官方 `dsh-tool-bash` / `dsh-tool-pwsh` 行为一致。
 - 后台任务注册进通用 `jobs` registry，支持 `run_in_background` / `job_output` / `job_kill`。
-- 前端设置页的「默认终端」是枚举（UI 自动渲染为下拉），模型每次调用都只按该设置执行，无法自行切换终端。
+- 两行设置都是枚举下拉（DSH 原生 Menu 胶囊语法），模型每次调用只按对应设置执行，无法自行切换终端；`terminalShell` 为空时的行为与「只有一行设置」完全一致（零迁移成本）。
 
 ## 安装（web profile）
 
@@ -78,13 +79,18 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 
 ## 使用
 
-**用户在 Web UI 设置默认终端**：打开设置（齿轮）→ 通用 →「默认终端」下拉，选择 PowerShell / Git Bash / WSL 之一。改动即时生效并持久化。
+**用户在 Web UI 设置终端**：打开设置（齿轮）→ 通用，有两行：
 
-模型看到 `shell` 工具后，执行命令时自动使用你选择的终端（工具不暴露终端参数，模型无法更改你的选择）：
+- **Shell 工具默认终端**（`defaultShell`）：非交互命令走哪个终端；
+- **Terminal 工具默认终端**（`terminalShell`）：交互式 `terminal` 工具开会话走哪个终端；选「跟随 Shell 工具默认」= 不单独设置。
 
-- 默认终端 = Git Bash 时：`shell(command: "git status")` 走 Git Bash
-- 默认终端 = WSL 时：`shell(command: "ls -la /mnt/d/WorkSpace")` 走 WSL；传 `distro: "Ubuntu"` 可指定发行版
-- 默认终端 = PowerShell 时：`shell(command: "Get-Process node")` 走 PowerShell
+改动即时生效并持久化。模型看到 `shell` 工具后，执行命令时自动使用 **Shell 工具默认终端**（工具不暴露终端参数，模型无法更改你的选择）：
+
+- Shell 工具默认终端 = Git Bash 时：`shell(command: "git status")` 走 Git Bash
+- Shell 工具默认终端 = WSL 时：`shell(command: "ls -la /mnt/d/WorkSpace")` 走 WSL；传 `distro: "Ubuntu"` 可指定发行版
+- Shell 工具默认终端 = PowerShell 时：`shell(command: "Get-Process node")` 走 PowerShell
+
+`terminal(action: "open")` 同理，使用 **Terminal 工具默认终端**；未单独设置时跟随 Shell 工具默认终端。
 
 ## 模型使用示例
 
@@ -96,13 +102,14 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 
 ## 配置
 
-**Web UI 设置**（推荐）：设置 → 通用 →「默认终端」。
+**Web UI 设置**（推荐）：设置 → 通用 →「Shell 工具默认终端」/「Terminal 工具默认终端」。
 
 插件 row 的 `config`（覆盖默认，作为设置的 composition 基准）：
 
 | 键 | 默认 | 说明 |
 |----|------|------|
-| `defaultShell` | `powershell` | 设置未覆盖时的后端 |
+| `defaultShell` | `powershell` | Shell 工具的后端；也是设置未覆盖时的基准 |
+| `terminalShell` | `""` | Terminal 工具的后端；**空 = 跟随 `defaultShell`** |
 | `timeoutMs` | 120000 | 默认超时 |
 | `maxTimeoutMs` | 600000 | 调用方 timeoutMs 上限 |
 | `pwshPath` | 自动探测 | 固定 pwsh.exe 路径 |

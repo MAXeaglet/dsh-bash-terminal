@@ -1,6 +1,13 @@
-// dsh-bash-terminal client plugin: a "Default terminal" preference row in the
+// dsh-bash-terminal client plugin: "Default terminal" preference rows in the
 // Web UI General settings, mirroring the shipped EnterBehaviorRow grammar
 // (row layout, capsule selector with chevron, --dsw-* tokens).
+//
+// 本地分设改动（2026-09-08 起，移植到 0.3.15）：上游只有一行设置（写 defaultShell，
+// shell 与 terminal 工具共用）。本地把这一行拆成两行——Shell 工具默认终端（写
+// defaultShell，语义不变）+ Terminal 工具默认终端（写 terminalShell，含「跟随 Shell
+// 工具默认」= ""）。host 侧 lib/index.js 的 terminalShellOf() 决定 terminal 工具实际用哪个。
+// 为什么必须改 client 并重打包：这行下拉不是通用 schema 表单渲染，而是本插件自定义注册进
+// settings.general.item 槽位的 React 行（见 本地自改留痕/dsh-bash-terminal改动/*.md）。
 //
 // DSH >= 0.1.5: the browser module table (PLATFORM_MODULES) seeds react,
 // @deepseek-ai/cordis, @deepseek-ai/dsh-client-store, @deepseek-ai/dsh-client-ui-slots,
@@ -34,15 +41,21 @@ if (typeof document !== "undefined" && document.querySelector("style[data-plugin
 }
 
 const zh = {
-  "shell.title": "默认终端",
+  "shell.title": "Shell 工具默认终端",
   "shell.description": "shell 工具执行命令时使用的终端",
+  "terminal.title": "Terminal 工具默认终端",
+  "terminal.description": "交互式 terminal 工具打开会话时使用的终端",
+  "terminal.follow": "跟随 Shell 工具默认",
   "shell.powershell": "PowerShell",
   "shell.gitbash": "Git Bash",
   "shell.wsl": "WSL"
 };
 const en = {
-  "shell.title": "Default terminal",
+  "shell.title": "Shell tool default terminal",
   "shell.description": "Terminal used by the shell tool",
+  "terminal.title": "Terminal tool default terminal",
+  "terminal.description": "Terminal used when the interactive terminal tool opens a session",
+  "terminal.follow": "Follow the shell tool",
   "shell.powershell": "PowerShell",
   "shell.gitbash": "Git Bash",
   "shell.wsl": "WSL"
@@ -50,25 +63,27 @@ const en = {
 
 export const inject = ["slots", "locale", "settingsScope"];
 
-function ShellPreferenceRow({ t, useStore, setShell }) {
-  const shell = useStore((s) => s.shell);
+/** 公共行组件：两行只有「读 store 哪个字段 / 标题 / 选项集 / 写哪个 key」不同。 */
+function SelectRow({ t, useStore, field, options, titleKey, descKey, setValue }) {
+  const value = useStore((s) => (field === "terminal" ? s.terminal : s.shell));
   const writable = useStore((s) => s.writable);
   const [open, setOpen] = useState(false);
-  const items = SHELLS.map((id) => ({ id, label: t("shell." + id) }));
+  const labelOf = (id) => (id === "" ? t("terminal.follow") : t("shell." + id));
+  const items = options.map((id) => ({ id, label: labelOf(id) }));
   return (
     <div className="btRow">
       <div className="btRowText">
-        <div className="btTitle">{t("shell.title")}</div>
-        <div className="btDesc">{t("shell.description")}</div>
+        <div className="btTitle">{t(titleKey)}</div>
+        <div className="btDesc">{t(descKey)}</div>
       </div>
       <Menu
         open={open}
         onClose={() => setOpen(false)}
         items={items}
-        selectedId={shell}
+        selectedId={value}
         onSelect={(id) => {
           setOpen(false);
-          setShell(id);
+          setValue(id);
         }}
         align="end"
         portal
@@ -82,7 +97,7 @@ function ShellPreferenceRow({ t, useStore, setShell }) {
             onClick={() => setOpen(!open)}
             style={!writable ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
           >
-            {t("shell." + shell)}
+            {labelOf(value)}
             <IconChevronDownOutline14 className="btChevron" />
           </button>
         }
@@ -95,37 +110,43 @@ export function apply(ctx) {
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), "bash-terminal: settings dictionaries");
   const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE });
   const store = defineStore({
-    init: () => ({ shell: "powershell", revision: -1, writable: false }),
+    init: () => ({ shell: "powershell", terminal: "", revision: -1, writable: false }),
     actions: {
-      sync: (d, shell, revision, writable) => {
+      // 两个字段各自独立；revision 守卫让两行重复 push 时只认最新快照（幂等）。
+      sync: (d, shell, terminal, revision, writable) => {
         if (revision !== undefined && revision <= d.revision) return;
         if (shell !== undefined) d.shell = shell;
+        if (terminal !== undefined) d.terminal = terminal;
         if (revision !== undefined) d.revision = revision;
         if (writable !== undefined) d.writable = writable;
       }
     }
   });
   let bound;
-  const push = (snap) => bound?.sync(snap.value?.defaultShell, snap.revision, snap.writable);
-  ctx.slots.inject(
-    "settings.general.item",
-    () =>
-      ctx.slots.register(
-        {
-          name: "settings.general.item",
-          id: "bash-terminal-shell",
-          order: 20,
-          store,
-          locale: SETTINGS_NS,
-          inject: (actions) => {
-            bound = actions;
-            push(scope.getSnapshot());
-            return { setShell: (value) => void scope.set("defaultShell", value) };
-          }
-        },
-        ShellPreferenceRow
-      ),
-    "bash-terminal: settings row"
-  );
+  const push = (snap) => bound?.sync(snap.value?.defaultShell, snap.value?.terminalShell, snap.revision, snap.writable);
+  const registerRow = (id, order, field, options, key, titleKey, descKey) =>
+    ctx.slots.inject(
+      "settings.general.item",
+      () =>
+        ctx.slots.register(
+          {
+            name: "settings.general.item",
+            id,
+            order,
+            store,
+            locale: SETTINGS_NS,
+            inject: (actions) => {
+              bound = actions;
+              push(scope.getSnapshot());
+              return { setValue: (value) => void scope.set(key, value) };
+            }
+          },
+          (props) => <SelectRow {...props} field={field} options={options} titleKey={titleKey} descKey={descKey} />
+        ),
+      "bash-terminal: settings row " + id
+    );
+
+  registerRow("bash-terminal-shell", 20, "shell", SHELLS, "defaultShell", "shell.title", "shell.description");
+  registerRow("bash-terminal-terminal", 21, "terminal", ["", ...SHELLS], "terminalShell", "terminal.title", "terminal.description");
   ctx.effect(() => scope.subscribe(() => push(scope.getSnapshot())), "bash-terminal: settings watch");
 }

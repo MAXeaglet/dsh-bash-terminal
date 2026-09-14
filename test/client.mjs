@@ -35,7 +35,7 @@ const mockDefineStore = (decl) => ({
 });
 
 // --- mocked services ---
-let scopeState = { status: "ready", value: { defaultShell: "gitbash" }, revision: 3, writable: true };
+let scopeState = { status: "ready", value: { defaultShell: "gitbash", terminalShell: "" }, revision: 3, writable: true };
 const setCalls = [];
 const localeRegisters = [];
 const slotRegistrations = [];
@@ -73,7 +73,6 @@ globalThis.window = {
         if (name === "react/jsx-runtime" || name === "react" || name === "react-dom/server") return loadShared(name);
         if (name === "@deepseek-ai/dsh-client-ui-primitives") {
           const React = loadShared("react");
-          const el = (tag) => (props) => React.createElement(tag, props, props.children);
           return {
             Menu: (props) => React.createElement("div", null, props.anchor),
             IconChevronDownOutline14: () => null
@@ -92,54 +91,87 @@ assert.strictEqual(typeof exported.apply, "function");
 // --- run apply ---
 exported.apply(ctx);
 
-// locale dictionaries registered
+// locale dictionaries registered (shell row + terminal row + the follow option)
 assert.strictEqual(localeRegisters.length, 1);
 assert.strictEqual(localeRegisters[0].ns, "settings.bash-terminal");
-assert.ok(localeRegisters[0].dicts.zh["shell.title"]);
-assert.ok(localeRegisters[0].dicts.en["shell.title"]);
+for (const key of ["shell.title", "terminal.title", "terminal.follow"]) {
+  assert.ok(localeRegisters[0].dicts.zh[key], "zh locale has " + key);
+  assert.ok(localeRegisters[0].dicts.en[key], "en locale has " + key);
+}
 
-// settings row registered into the General item slot
-assert.strictEqual(slotRegistrations.length, 1);
-assert.strictEqual(slotRegistrations[0].slot, "settings.general.item");
-const regObj = slotRegistrations[0].fn();
-const reg = regObj;
-const Component = regObj.Component;
-assert.strictEqual(reg.name, "settings.general.item");
-assert.strictEqual(reg.id, "bash-terminal-shell");
-assert.strictEqual(typeof reg.order, "number");
-assert.strictEqual(reg.locale, "settings.bash-terminal");
-assert.ok(reg.store && typeof reg.store.create === "function", "store factory passed to register");
-assert.strictEqual(typeof Component, "function", "row component passed");
+// two settings rows registered into the General item slot: shell + terminal
+assert.strictEqual(slotRegistrations.length, 2);
+assert.deepStrictEqual(slotRegistrations.map((r) => r.slot), ["settings.general.item", "settings.general.item"]);
+const regShell = slotRegistrations[0].fn();
+const regTerminal = slotRegistrations[1].fn();
+for (const reg of [regShell, regTerminal]) {
+  assert.strictEqual(reg.name, "settings.general.item");
+  assert.strictEqual(reg.locale, "settings.bash-terminal");
+  assert.ok(reg.store && typeof reg.store.create === "function", "store factory passed to register");
+  assert.strictEqual(typeof reg.Component, "function", "row component passed");
+}
+assert.strictEqual(regShell.id, "bash-terminal-shell");
+assert.strictEqual(regTerminal.id, "bash-terminal-terminal");
+assert.strictEqual(typeof regShell.order, "number");
+assert.strictEqual(regTerminal.order, regShell.order + 1, "the terminal row follows the shell row");
+// both rows share one store, so a single settings snapshot feeds both
+assert.strictEqual(regShell.store, regTerminal.store);
 
-// inject callback binds actions, pushes initial snapshot, exposes setShell
+// inject callback binds actions, pushes the initial snapshot, exposes setValue
 let lastSync;
-const injected = reg.inject({ sync: (...args) => { lastSync = args; } });
-assert.ok(injected && typeof injected.setShell === "function");
-assert.deepStrictEqual(lastSync, ["gitbash", 3, true], "initial snapshot pushed (user default gitbash)");
+const injectedShell = regShell.inject({ sync: (...args) => { lastSync = args; } });
+assert.ok(injectedShell && typeof injectedShell.setValue === "function");
+assert.deepStrictEqual(lastSync, ["gitbash", "", 3, true], "initial snapshot pushed (shell=gitbash, terminal unset)");
 
-// setShell writes through to the settings scope
-injected.setShell("wsl");
+// each row writes through to its own settings key
+injectedShell.setValue("wsl");
 assert.deepStrictEqual(setCalls, [{ field: "defaultShell", value: "wsl" }]);
+const injectedTerminal = regTerminal.inject({ sync: (...args) => { lastSync = args; } });
+injectedTerminal.setValue("gitbash");
+assert.deepStrictEqual(setCalls, [
+  { field: "defaultShell", value: "wsl" },
+  { field: "terminalShell", value: "gitbash" }
+]);
 
-// row component renders through real React (DSH-native Menu/Button are mocked)
+// rows render through real React (DSH-native Menu/Button are mocked)
 const { renderToString } = loadShared("react-dom/server");
-const renderState = { shell: "wsl", revision: 3, writable: true };
+const renderState = { shell: "wsl", terminal: "", revision: 3, writable: true };
 const selectors = [];
 const fakeUseStore = (sel) => { selectors.push(sel(renderState)); return selectors[selectors.length - 1]; };
-const t = (k) => ({ "shell.title": "默认终端", "shell.powershell": "PowerShell", "shell.gitbash": "Git Bash", "shell.wsl": "WSL" }[k] ?? k);
-const html = renderToString(loadShared("react").createElement(Component, { t, useStore: fakeUseStore, setShell: injected.setShell }));
-assert.ok(html.includes("默认终端"), "row renders the title");
-assert.ok(!html.includes("AI 无法更改"), "removed the 'AI cannot change' phrase");
-assert.ok(html.includes("WSL"), "selector shows the current shell label");
-assert.ok(html.includes("btSelector"), "selector uses the official capsule class");
-assert.deepStrictEqual(selectors, ["wsl", true], "component reads shell + writable from store");
+const t = (k) => ({
+  "shell.title": "Shell 工具默认终端",
+  "shell.description": "shell 工具执行命令时使用的终端",
+  "terminal.title": "Terminal 工具默认终端",
+  "terminal.description": "交互式 terminal 工具打开会话时使用的终端",
+  "terminal.follow": "跟随 Shell 工具默认",
+  "shell.powershell": "PowerShell",
+  "shell.gitbash": "Git Bash",
+  "shell.wsl": "WSL"
+}[k] ?? k);
+
+const htmlShell = renderToString(loadShared("react").createElement(regShell.Component, {
+  t, useStore: fakeUseStore, field: "shell",
+  options: ["powershell", "gitbash", "wsl"],
+  titleKey: "shell.title", descKey: "shell.description", setValue: injectedShell.setValue
+}));
+assert.ok(htmlShell.includes("Shell 工具默认终端"), "shell row renders its own title");
+assert.ok(htmlShell.includes("WSL"), "shell selector shows the current shell label");
+assert.ok(htmlShell.includes("btSelector"), "selector uses the official capsule class");
+assert.ok(!htmlShell.includes("跟随 Shell 工具默认"), "the shell row does not offer the follow option");
+
+const htmlTerminal = renderToString(loadShared("react").createElement(regTerminal.Component, {
+  t, useStore: fakeUseStore, field: "terminal",
+  options: ["", "powershell", "gitbash", "wsl"],
+  titleKey: "terminal.title", descKey: "terminal.description", setValue: injectedTerminal.setValue
+}));
+assert.ok(htmlTerminal.includes("Terminal 工具默认终端"), "terminal row renders its own title");
+assert.ok(htmlTerminal.includes("跟随 Shell 工具默认"), "terminal row shows the follow label while unset");
+
+assert.deepStrictEqual(selectors, ["wsl", true, "", true], "rows read their own field + writable from the store");
 
 // settings change -> bound actions sync again (subscribe callback fires push)
-scopeState = { status: "ready", value: { defaultShell: "powershell" }, revision: 4, writable: true };
-// re-invoke the stored subscribe callback path: the bundle registered a
-// subscription when apply ran; we captured nothing, so emulate by calling
-// the register inject again with a fresh bound (fresh push uses new state).
-const injected2 = reg.inject({ sync: (...args) => { lastSync = args; } });
-assert.deepStrictEqual(lastSync, ["powershell", 4, true], "re-push after settings change");
+scopeState = { status: "ready", value: { defaultShell: "powershell", terminalShell: "gitbash" }, revision: 4, writable: true };
+const injectedAgain = regShell.inject({ sync: (...args) => { lastSync = args; } });
+assert.deepStrictEqual(lastSync, ["powershell", "gitbash", 4, true], "re-push after settings change");
 
 console.log("CLIENT LOGIC TESTS PASSED");
