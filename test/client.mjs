@@ -39,6 +39,7 @@ let scopeState = { status: "ready", value: { defaultShell: "gitbash", terminalSh
 const setCalls = [];
 const localeRegisters = [];
 const slotRegistrations = [];
+let scopeSubscriber;
 const ctx = {
   slots: {
     inject: (slot, fn) => { slotRegistrations.push({ slot, fn }); },
@@ -48,7 +49,8 @@ const ctx = {
   settingsScope: {
     bind: () => ({
       getSnapshot: () => scopeState,
-      subscribe: () => () => {},
+      // 捕获订阅回调：设置变更时由框架调用，测试要能手动触发（见末尾 settings change）
+      subscribe: (fn) => { scopeSubscriber = fn; return () => {}; },
       set: (field, value) => { setCalls.push({ field, value }); },
       unset: () => {}
     })
@@ -114,19 +116,23 @@ assert.strictEqual(regShell.id, "bash-terminal-shell");
 assert.strictEqual(regTerminal.id, "bash-terminal-terminal");
 assert.strictEqual(typeof regShell.order, "number");
 assert.strictEqual(regTerminal.order, regShell.order + 1, "the terminal row follows the shell row");
-// both rows share one store, so a single settings snapshot feeds both
-assert.strictEqual(regShell.store, regTerminal.store);
+// 两行用的是同一个 store **spec**；框架对每次注册各调一次 create()，所以运行时是两份实例
+// （下面按实例驱动，并验证设置变更必须落进**两份** store）
+assert.strictEqual(regShell.store, regTerminal.store, "same store spec");
 
-// inject callback binds actions, pushes the initial snapshot, exposes setValue
-let lastSync;
-const injectedShell = regShell.inject({ sync: (...args) => { lastSync = args; } });
+// 每次注册各 create() 一份 store → 用各自的实例驱动：inject() 绑定的是**这一行**的 actions，
+// 初始快照必须落进**它自己**的 store。
+const storeShell = regShell.store.create();
+const storeTerminal = regTerminal.store.create();
+const injectedShell = regShell.inject(storeShell.actions);
 assert.ok(injectedShell && typeof injectedShell.setValue === "function");
-assert.deepStrictEqual(lastSync, ["gitbash", "", 3, true], "initial snapshot pushed (shell=gitbash, terminal unset)");
+assert.deepStrictEqual(storeShell.getSnapshot(), { shell: "gitbash", terminal: "", revision: 3, writable: true }, "shell store got the initial snapshot");
+const injectedTerminal = regTerminal.inject(storeTerminal.actions);
+assert.deepStrictEqual(storeTerminal.getSnapshot(), { shell: "gitbash", terminal: "", revision: 3, writable: true }, "terminal store got the initial snapshot");
 
 // each row writes through to its own settings key
 injectedShell.setValue("wsl");
 assert.deepStrictEqual(setCalls, [{ field: "defaultShell", value: "wsl" }]);
-const injectedTerminal = regTerminal.inject({ sync: (...args) => { lastSync = args; } });
 injectedTerminal.setValue("gitbash");
 assert.deepStrictEqual(setCalls, [
   { field: "defaultShell", value: "wsl" },
@@ -169,9 +175,11 @@ assert.ok(htmlTerminal.includes("跟随 Shell 工具默认"), "terminal row show
 
 assert.deepStrictEqual(selectors, ["wsl", true, "", true], "rows read their own field + writable from the store");
 
-// settings change -> bound actions sync again (subscribe callback fires push)
+// 设置变更 → 订阅回调必须把新快照推进**每一份** store（回归守卫：只记一个 bound 的话，
+// shell 那一行会停在旧值 —— 这正是 review 指出的 bug）
 scopeState = { status: "ready", value: { defaultShell: "powershell", terminalShell: "gitbash" }, revision: 4, writable: true };
-const injectedAgain = regShell.inject({ sync: (...args) => { lastSync = args; } });
-assert.deepStrictEqual(lastSync, ["powershell", "gitbash", 4, true], "re-push after settings change");
+scopeSubscriber();
+assert.deepStrictEqual(storeShell.getSnapshot(), { shell: "powershell", terminal: "gitbash", revision: 4, writable: true }, "shell store re-synced after the change");
+assert.deepStrictEqual(storeTerminal.getSnapshot(), { shell: "powershell", terminal: "gitbash", revision: 4, writable: true }, "terminal store re-synced after the change");
 
 console.log("CLIENT LOGIC TESTS PASSED");

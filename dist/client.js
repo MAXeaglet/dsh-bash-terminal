@@ -124,8 +124,10 @@ function apply(ctx) {
       }
     }
   });
-  let bound;
-  const push = (snap) => bound?.sync(snap.value?.defaultShell, snap.value?.terminalShell, snap.revision, snap.writable);
+  const bounds = [];
+  const push = (snap) => {
+    for (const bound of bounds) bound.sync(snap.value?.defaultShell, snap.value?.terminalShell, snap.revision, snap.writable);
+  };
   const registerRow = (id, order, field, options, key, titleKey, descKey) => ctx.slots.inject(
     "settings.general.item",
     () => ctx.slots.register(
@@ -136,7 +138,7 @@ function apply(ctx) {
         store,
         locale: SETTINGS_NS,
         inject: (actions) => {
-          bound = actions;
+          bounds.push(actions);
           push(scope.getSnapshot());
           return { setValue: (value) => void scope.set(key, value) };
         }

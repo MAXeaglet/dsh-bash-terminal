@@ -57,7 +57,7 @@ For local development (junction install, source changes apply instantly) see the
 
 ## Config
 
-Web UI: Settings -> General -> Default terminal. Plugin row `config` overrides: `defaultShell`, `timeoutMs`, `maxTimeoutMs`, `pwshPath`, `gitBashPath`, `wslPath`.
+Web UI: Settings -> General -> **Shell tool default terminal** / **Terminal tool default terminal** (`terminalShell` empty = follow the shell tool). Plugin row `config` overrides: `defaultShell`, `terminalShell`, `timeoutMs`, `maxTimeoutMs`, `pwshPath`, `gitBashPath`, `wslPath`.
 
 ## Uninstall
 

@@ -110,8 +110,8 @@ if ($Action -eq "install") {
   Write-Host "Done! Restart dsh web for the plugin to take effect:"
   Write-Host "  1) close the running dsh web (Ctrl+C or kill the process)"
   Write-Host "  2) run:  dsh web"
-  Write-Host "After restart, open Settings -> General: a 'Default terminal' dropdown"
-  Write-Host "(PowerShell / Git Bash / WSL) appears; the shell tool obeys it."
+  Write-Host "After restart, open Settings -> General: two dropdowns appear --"
+  Write-Host "'Shell tool default terminal' and 'Terminal tool default terminal' (PowerShell / Git Bash / WSL)."
 } else {
   Write-Host "[1/4] remove links ..."
   if (Test-Path $pluginLink) { Remove-Item $pluginLink -Force -Recurse; Write-Host "  removed: $pluginLink" }

@@ -122,8 +122,12 @@ export function apply(ctx) {
       }
     }
   });
-  let bound;
-  const push = (snap) => bound?.sync(snap.value?.defaultShell, snap.value?.terminalShell, snap.revision, snap.writable);
+  // 每一行注册都会各自 create() 一份 store 实例、并各自注入一份 actions，所以要把 actions
+  // 收成一列并**全部**同步：只保留最后一个的话，设置变更只会推进那一行，另一行的选择器会停在旧值。
+  const bounds = [];
+  const push = (snap) => {
+    for (const bound of bounds) bound.sync(snap.value?.defaultShell, snap.value?.terminalShell, snap.revision, snap.writable);
+  };
   const registerRow = (id, order, field, options, key, titleKey, descKey) =>
     ctx.slots.inject(
       "settings.general.item",
@@ -136,7 +140,7 @@ export function apply(ctx) {
             store,
             locale: SETTINGS_NS,
             inject: (actions) => {
-              bound = actions;
+              bounds.push(actions);
               push(scope.getSnapshot());
               return { setValue: (value) => void scope.set(key, value) };
             }
