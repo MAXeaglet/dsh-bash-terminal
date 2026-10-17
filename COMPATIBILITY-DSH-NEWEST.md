@@ -79,3 +79,42 @@ dsh --profile web --dump-config | Select-String dsh-bash-terminal   # 组合树
 
 浏览器侧验证：刷新 `http://127.0.0.1:3080`，启动遮罩不再出现 `Failed to load plugins`，
 且 设置 → 通用 中「默认终端」行可读可写。
+
+---
+
+## 2026-10-17：适配 DSH 0.2.x（0.2.0-rc.2 / 0.2.1-alpha.2）
+
+> 承接 PR #12（设置接缝迁到 0.2.0）与 issue #13（peer 声明），补上 0.2.x 的运行时修复与兼容声明。
+
+### 症状
+
+0.2.1-alpha.2 上，`shell` 工具用默认 Git Bash 正常；但**受限模式（read-only / workspace-write）+ PowerShell**
+的调用全部失败：`ctx.sandbox.confine(...)` 返回 Promise，`confined.argv` 为 `undefined`，随后
+`ctx.subprocess.spawn` 收到非法 argv 抛错。
+
+### 根因
+
+0.2.x 的 `@deepseek-ai/dsh-sandbox-local` 里 `LocalSandboxProvider.confine(argv, policy, signal)` 是
+`async` 方法（返回 `Promise<{ argv, enforcement, denialSignatures, runnerFailureRules }>`），
+`confineSpawn()` 却按同步返回值使用。**0.2.0-rc.2 上就已如此**——只是 Git Bash/WSL 不包装、
+默认终端又是 Git Bash，受限 PowerShell 这条路径从未被走到。
+
+### 改动
+
+| 位置 | 改动 |
+|------|------|
+| `lib/index.js` | `confineSpawn()` 改为 `async`；`await ctx.sandbox.confine(...)`；调用点 `await confineSpawn(...)`。`await` 对 0.1.x 的同步返回值无副作用。 |
+| `package.json` | DSH `peerDependencies` 从 `^0.1.5-rc.1` → `^0.2.0-rc.2`（= `>=0.2.0-rc.2 <0.3.0-0`）：0.2.0-rc.2 与 0.2.1-alpha.2 均满足，**不再需要精确版本豁免**；0.1.x 不再声明支持。 |
+| `test/apply.mjs` | `ctx.sandbox.confine` mock 改为 async（漏 `await` 立即失败）；settings mock 换成 0.2.x 的 `ctx.fiber.config`（volatile `{ get() }` 持有者）。 |
+| `test/client.mjs` | 重写为 0.2.x 客户端接缝：mock `locale` / `configForms.whileServed` / keyed `slots`；断言 `plugins.row.config`（key `dsh-bash-terminal#tool-bash-terminal`) 与 `plugins.bundle.config`（key `dsh-bash-terminal`）；新增回归断言 bundle 不得包含 `settingsScope`。 |
+| `README*.md` / `CHANGELOG.md` | 兼容性段落改为 0.2.x；注明 0.2.x 不再需要 `install.ps1` 的 settings 白名单 patch。 |
+
+### 验证
+
+| 检查 | 结果 |
+|------|------|
+| 四套测试（unit / apply / client / terminal） | 通过；terminal 为真实 node-pty 交互会话 |
+| 0.2.1-alpha.2 实机（DSH NEXT 2.0.18-next，Windows 11） | 插件装配 active，`shell` / `terminal` 工具注册，Git Bash 后端执行正常 |
+| 反向验证 | 去掉两处 `await` → `node test/apply.mjs` 立即以非法 argv 失败；恢复后通过 |
+| 0.2.0-rc.2 | 见 PR #12 的验证表（当时默认 Git Bash，受限 PowerShell 路径未覆盖） |
+| 受限 PowerShell 路径 | 由 async-mock 单测覆盖；未在真实 ACL runner 下回归（本机既有沙箱限制） |

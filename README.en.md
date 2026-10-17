@@ -26,11 +26,10 @@ The package ships the official `dsh.bundle` manifest (its own `cordis.patch.yml`
 ```powershell
 npm install -g dsh-bash-terminal
 dsh plugin --profile web add dsh-bash-terminal        # adds to profile bundles + applies the patch
-powershell -ExecutionPolicy Bypass -File install.ps1 install   # patches the DSH settings-UI allowlist (see below)
 # restart dsh web
 ```
 
-> **DSH limitation**: the Web settings client only exposes a hard-coded allowlist of settings namespaces (`dsh-host-apiproxy`); third-party settings writes are refused with `settings-not-exposed` otherwise. `install.ps1` patches the allowlist (with a backup) — re-run it after upgrading DSH; `install` / `uninstall` restores it.
+> **Compatibility**: requires DSH **0.2.x** (tested on 0.2.0-rc.2 and 0.2.1-alpha.2). The settings surface moved to the plugin's own Config schema plus `configForms` / keyed slot registration, so the Web UI renders "Default terminal" under Settings → Plugins → dsh-bash-terminal. `peerDependencies` declare `^0.2.0-rc.2`, so the exact-version exemption is no longer required, and the 0.1.x `install.ps1` settings-allowlist patch is obsolete (kept only for old 0.1.x hosts).
 
 For local development (junction install, source changes apply instantly) see the Chinese README's development section.
 

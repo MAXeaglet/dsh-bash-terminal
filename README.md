@@ -16,7 +16,7 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 
 ## 设计要点
 
-- **终端由用户决定，AI 无法更改**：Web UI 设置页（设置 → 通用）出现"默认终端"下拉（PowerShell / Git Bash / WSL）；`shell` 工具永远只使用该设置，不暴露终端参数给模型。设置通过 DSH settings 系统持久化（settings.yaml）。
+- **终端由用户决定，AI 无法更改**：Web UI 设置页（设置 → 插件 → dsh-bash-terminal）出现“默认终端”选择器（PowerShell / Git Bash / WSL）；`shell` 工具永远只使用该设置，不暴露终端参数给模型。设置持久化在 profile 的 `cordis.patch.yml`（0.2.x 的 Config 文档）。
 - **不占用 `ctx.shell` 能力接缝**：DSH 自带的沙箱化 `pwsh` 工具保持原样可用；本插件的 `shell` 工具是**额外的**多终端入口。
 - 通过共享的 `ctx.subprocess` seam 派生进程：进程树终止（Windows `taskkill /T`）、SIGTERM→grace→SIGKILL、输出 spill 文件，与官方 `dsh-tool-bash` / `dsh-tool-pwsh` 行为一致。
 - 后台任务注册进通用 `jobs` registry，支持 `run_in_background` / `job_output` / `job_kill`。
@@ -33,11 +33,12 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 npm install -g dsh-bash-terminal
 dsh plugin --profile web add dsh-bash-terminal   # 自动加进 profile 的 bundles 并应用 patch
 
-# 2. patch DSH 设置白名单（DSH 限制，见下方说明）
-powershell -ExecutionPolicy Bypass -File install.ps1 install
-
-# 3. 重启 dsh web
+# 2. 重启 dsh web
 ```
+
+> 0.2.x 不需要再跑 `install.ps1` 的 settings 白名单 patch：设置面已改为插件自己的 Config schema
+> （Web UI 在「设置 → 插件 → dsh-bash-terminal」渲染「默认终端」选择器），旧的
+> `settings-not-exposed` 白名单机制不复存在。`install.ps1` 只为 0.1.x 老宿主保留。
 
 > 已用临时 profile 实测：`bundles: [dsh-bash-terminal]` → dump-config 自动出现 `tool-bash-terminal` entry。
 
@@ -51,7 +52,7 @@ New-Item -ItemType Junction -Path "$profile\node_modules\dsh-bash-terminal" -Tar
 # 2. 让插件能解析 @deepseek-ai/* 依赖（junction 到 profile 的依赖树，插件与宿主共用同一份模块实例）
 New-Item -ItemType Junction -Path "D:\WorkSpace\projects\dsh-bash-terminal\node_modules\@deepseek-ai" -Target "$profile\..\node_modules\@deepseek-ai" | Out-Null
 
-# 3. 让 profile 通过官方 bundle 挂载插件（install.ps1 install 会自动做；等价于在 dsh.profile.bundles 加 "dsh-bash-terminal"）
+# 3. 让 profile 通过官方 bundle 挂载插件：在 dsh.profile.bundles 加 "dsh-bash-terminal"（0.2.x 不需要 install.ps1）
 # 4. （仅修改前端源码后）重新打包 client bundle:
 #    cd D:\WorkSpace\projects\dsh-bash-terminal && node scripts/build-client.mjs
 # 5. 重启 dsh web
@@ -61,12 +62,17 @@ New-Item -ItemType Junction -Path "D:\WorkSpace\projects\dsh-bash-terminal\node_
 > `@deepseek-ai/*` 副本 —— 插件和宿主就不再共用模块实例，宿主升级后插件会停在旧 API 上
 > （本项目曾因此停在 0.1.0-rc.6）。只刷新 lock 时用 `npm install --package-lock-only`。
 
-> **兼容性**：要求 DSH ≥ **0.1.5-rc.1**。0.1.5 把浏览器模块表里的 `@deepseek-ai/dsh-client-runtime`
-> 改名为 `@deepseek-ai/dsh-client-store` 且只按精确裸名命中；旧 bundle 在新宿主上会报
-> `Failed to load plugins` / `require(...) missed the module table`。
+> **兼容性**：要求 DSH **0.2.x**（已在 **0.2.0-rc.2** 与 **0.2.1-alpha.2** 实测）。0.2.0 起设置面改为
+> 「插件自己的 Config schema + `configForms` / keyed slot 注册」：旧的 `ctx.settings.register()`、
+> `settingsScope` 和 `settings.general.item` 都已移除，本插件的宿主/客户端两半均已改写；
+> `peerDependencies` 声明 `^0.2.0-rc.2`，满足时 DSH 直接安装/装配，**不再需要精确版本豁免**。
 >
-> 另：0.1.5 的 Web 设置面改为 `settings.describe()` 动态枚举，**不再有 namespace 白名单**
-> （`settings-not-exposed` 已不存在），`install.ps1` 里的白名单 patch 只是历史遗留、可忽略。
+> 注意：0.2.x 的 `ctx.sandbox.confine()` 是 **async**（返回 `Promise<{ argv, enforcement, … }>`）。
+> 受限模式（read-only / workspace-write）下的 PowerShell 必须 `await` 之后才拿得到 argv，
+> 否则会以非法 argv 失败——这个问题在 0.2.0-rc.2 上就已存在，只是因为 Git Bash 后端不包装、
+> 多数人用不到受限 PowerShell 才没暴露。本版本已修复。
+>
+> 仍停留在 0.1.x 的用户请继续使用 0.3.15 及更早版本；本版本不再声明兼容 0.1.x。
 
 > 当前已不再需要手动改 profile 的 `cordis.patch.yml`：插件包内自带 `dsh.bundle.patch`（包内 `cordis.patch.yml`），只要 profile 的 `dsh.profile.bundles` 里有 `dsh-bash-terminal`，DSH 就会自动挂载。
 
