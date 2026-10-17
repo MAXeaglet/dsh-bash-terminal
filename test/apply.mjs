@@ -12,19 +12,20 @@ const ctx = {
   tools: { register: (tool) => { registered = tool; } },
   on: (event, handler) => { if (event === "system-prompt/assemble") assembleHandler = handler; },
   shellEnv: { collect: () => ({ DSH_WEB_URL: "http://127.0.0.1:3080" }) },
-  settings: {
-    register: (ns, schema, options) => {
-      assert.strictEqual(String(ns), "bash-terminal", "settings namespace");
-      assert.ok(schema, "settings schema provided");
-      assert.deepStrictEqual(options.base, { defaultShell: "powershell" }, "settings base");
-      return { get: () => ({ defaultShell: userDefaultShell }) };
-    }
+  // DSH 0.2.x seam: the plugin no longer injects `settings`; it reads its own
+  // Config entry, whose volatile `defaultShell` arrives as a lazy { get() }
+  // holder. Mirror that shape here so the live-read path is exercised.
+  fiber: {
+    config: { get defaultShell() { return { get: () => userDefaultShell }; } }
   },
   sandboxPolicy: {
     resolve: () => ({ mode: sandboxMode, workspaceRoot: "D:/WorkSpace", sessionId: "s1" })
   },
   sandbox: {
-    confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
+    // DSH 0.2.x: `SandboxProvider.confine` is async, so the real seam hands back
+    // a Promise. Keep this mock async so a regression that drops the `await`
+    // fails here instead of on a user's machine.
+    confine: async (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
   get: (key) => key === "approval" ? { request: async () => "allowed-once" } : key === "jobs" ? { start: (spec) => { jobsStarted.push(spec); return "job-bg-1"; } } : undefined,
   effect: () => () => {},
@@ -139,7 +140,7 @@ assert.deepStrictEqual(registered.parameters.properties.sandbox_permissions.enum
 sandboxMode = "read-only";
 userDefaultShell = "powershell";
 const realConfine = ctx.sandbox.confine;
-ctx.sandbox.confine = () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
+ctx.sandbox.confine = async () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
 await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec), /no sandbox backend/);
 ctx.sandbox.confine = realConfine;
 
@@ -161,9 +162,12 @@ assert.ok(spawnCalls.length >= 1, "background spawned");
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
 
-// settings schema rejects an out-of-enum user value
+// an out-of-enum live value falls back to the validated apply-time default
 userDefaultShell = "fish";
-await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec));
+sandboxMode = "danger-full-access";
+spawnCalls.length = 0;
+await registered.execute({ command: "x", description: "t" }, exec);
+assert.ok(spawnCalls[0].argv[0].includes("pwsh"), "invalid live value falls back to the validated default");
 
 // ---- system-prompt/assemble: description re-renders with the user's shell ----
 
