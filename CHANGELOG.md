@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **修复后台 `shell` 任务**（DSH 0.2.1）：`jobs.start()` 的 `owner` 改为 `exec.agent.id`。`dsh-jobs-local` 用 `ctx.agents.get(id)` 解析 owner，传 Agent 对象会让每个后台任务以 `session "[object Object]" has no live agent` 失败。
+- **后台输出走 `spec.output` 拉取源**：0.2.x 的 jobs 用 pull 源按绝对偏移收集输出，`run()` 返回的 `readOutput` 钩子不再被读取（表现为任务 completed 但 `job_output` 为空）。新增 `readStream` / `spawnErrorText` 与 `backgroundSources(live)`，在 `jobs.start({ output })` 中懒绑定进程；`readOutput` 保留给旧实现。
 - **适配 DSH 0.2.x（0.2.0-rc.2 / 0.2.1-alpha.2）并去掉版本豁免**。`peerDependencies` 从 `^0.1.5-rc.1` 对齐到 `^0.2.0-rc.2`（`>=0.2.0-rc.2 <0.3.0-0`）：满足范围时 DSH 直接安装/装配，不再需要 `allow-version` 精确豁免（issue #13）。
 - **修复受限模式 PowerShell 的非法 argv**：0.2.x 的 `ctx.sandbox.confine()` 是 `async`（返回 `Promise<{ argv, enforcement, … }>`），原代码按同步值使用，`confined.argv` 为 `undefined`，`ctx.subprocess.spawn` 随即以非法 argv 抛错。`confineSpawn()` 改为 `async` 并 `await` 之（对 0.1.x 同步返回值无副作用）。该问题在 0.2.0-rc.2 上同样存在，只是 Git Bash 不包装、默认终端又是 Git Bash，故未暴露。
 - **测试刷新到 0.2.x 接缝**：`test/apply.mjs` 改用 `ctx.fiber.config`（volatile `{ get() }`）替代已移除的 settings 注入，并把 `ctx.sandbox.confine` mock 改为 async —— 漏掉 `await` 会立刻失败（反向验证过）；`test/client.mjs` 重写为 `configForms.whileServed` + keyed `slots`（`plugins.row.config` / `plugins.bundle.config`），新增回归断言：bundle 不得再出现 `settingsScope`。

@@ -51,7 +51,7 @@ ctx.subprocess = {
   spawn: (spec) => { spawnCalls.push(spec); return fakeHandle; }
 };
 
-const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
+const exec = { signal: new AbortController().signal, agent: { id: "agent-1", session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
 
 // 1) user setting = powershell (default) -> powershell argv
 userDefaultShell = "powershell";
@@ -158,6 +158,19 @@ assert.strictEqual(typeof bgHooks.cancel, "function");
 assert.ok(bgHooks.done instanceof Promise);
 assert.strictEqual(typeof bgHooks.readOutput, "function");
 assert.ok(spawnCalls.length >= 1, "background spawned");
+// DSH 0.2.x jobs contract: the owner must be the agent *id* (dsh-jobs resolves it
+// through ctx.agents.get(id)); an Agent object makes every background shell job
+// fail with 'session "[object Object]" has no live agent'.
+assert.strictEqual(jobsStarted[0].owner, "agent-1", "job owner is the agent id, not the Agent object");
+// DSH 0.2.x jobs contract: background output is pulled from spec.output sources at
+// absolute offsets -- the run()-returned readOutput hook is ignored by
+// dsh-jobs-local 0.2.x, which is why job_output used to stay empty.
+assert.ok(Array.isArray(jobsStarted[0].output), "job declares spec.output pull sources");
+assert.deepStrictEqual(jobsStarted[0].output.map((s) => s.channel), ["stdout", "stderr"]);
+const stdoutPull = jobsStarted[0].output[0].read(0);
+assert.strictEqual(stdoutPull.text, "mock-out", "stdout pull source reads from the process");
+assert.strictEqual(stdoutPull.nextOffset, 1, "pull source advances by absolute offset");
+assert.strictEqual(jobsStarted[0].output[1].read(0).text, "", "stderr pull source is readable");
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
