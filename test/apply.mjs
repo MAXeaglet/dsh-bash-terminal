@@ -12,19 +12,20 @@ const ctx = {
   tools: { register: (tool) => { registered = tool; } },
   on: (event, handler) => { if (event === "system-prompt/assemble") assembleHandler = handler; },
   shellEnv: { collect: () => ({ DSH_WEB_URL: "http://127.0.0.1:3080" }) },
-  settings: {
-    register: (ns, schema, options) => {
-      assert.strictEqual(String(ns), "bash-terminal", "settings namespace");
-      assert.ok(schema, "settings schema provided");
-      assert.deepStrictEqual(options.base, { defaultShell: "powershell" }, "settings base");
-      return { get: () => ({ defaultShell: userDefaultShell }) };
-    }
+  // DSH 0.2.x seam: the plugin no longer injects `settings`; it reads its own
+  // Config entry, whose volatile `defaultShell` arrives as a lazy { get() }
+  // holder. Mirror that shape here so the live-read path is exercised.
+  fiber: {
+    config: { get defaultShell() { return { get: () => userDefaultShell }; } }
   },
   sandboxPolicy: {
     resolve: () => ({ mode: sandboxMode, workspaceRoot: "D:/WorkSpace", sessionId: "s1" })
   },
   sandbox: {
-    confine: (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
+    // DSH 0.2.x: `SandboxProvider.confine` is async, so the real seam hands back
+    // a Promise. Keep this mock async so a regression that drops the `await`
+    // fails here instead of on a user's machine.
+    confine: async (argv, policy) => ({ argv: ["sandbox-runner", "--", ...argv], enforcement: "full" })
   },
   get: (key) => key === "approval" ? { request: async () => "allowed-once" } : key === "jobs" ? { start: (spec) => { jobsStarted.push(spec); return "job-bg-1"; } } : undefined,
   effect: () => () => {},
@@ -50,7 +51,7 @@ ctx.subprocess = {
   spawn: (spec) => { spawnCalls.push(spec); return fakeHandle; }
 };
 
-const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
+const exec = { signal: new AbortController().signal, agent: { id: "agent-1", session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
 
 // 1) user setting = powershell (default) -> powershell argv
 userDefaultShell = "powershell";
@@ -139,7 +140,7 @@ assert.deepStrictEqual(registered.parameters.properties.sandbox_permissions.enum
 sandboxMode = "read-only";
 userDefaultShell = "powershell";
 const realConfine = ctx.sandbox.confine;
-ctx.sandbox.confine = () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
+ctx.sandbox.confine = async () => { throw new Error("sandbox mode \"read-only\" is requested but no sandbox backend is usable on this host"); };
 await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec), /no sandbox backend/);
 ctx.sandbox.confine = realConfine;
 
@@ -157,13 +158,29 @@ assert.strictEqual(typeof bgHooks.cancel, "function");
 assert.ok(bgHooks.done instanceof Promise);
 assert.strictEqual(typeof bgHooks.readOutput, "function");
 assert.ok(spawnCalls.length >= 1, "background spawned");
+// DSH 0.2.x jobs contract: the owner must be the agent *id* (dsh-jobs resolves it
+// through ctx.agents.get(id)); an Agent object makes every background shell job
+// fail with 'session "[object Object]" has no live agent'.
+assert.strictEqual(jobsStarted[0].owner, "agent-1", "job owner is the agent id, not the Agent object");
+// DSH 0.2.x jobs contract: background output is pulled from spec.output sources at
+// absolute offsets -- the run()-returned readOutput hook is ignored by
+// dsh-jobs-local 0.2.x, which is why job_output used to stay empty.
+assert.ok(Array.isArray(jobsStarted[0].output), "job declares spec.output pull sources");
+assert.deepStrictEqual(jobsStarted[0].output.map((s) => s.channel), ["stdout", "stderr"]);
+const stdoutPull = jobsStarted[0].output[0].read(0);
+assert.strictEqual(stdoutPull.text, "mock-out", "stdout pull source reads from the process");
+assert.strictEqual(stdoutPull.nextOffset, 1, "pull source advances by absolute offset");
+assert.strictEqual(jobsStarted[0].output[1].read(0).text, "", "stderr pull source is readable");
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
 
-// settings schema rejects an out-of-enum user value
+// an out-of-enum live value falls back to the validated apply-time default
 userDefaultShell = "fish";
-await assert.rejects(() => registered.execute({ command: "x", description: "t" }, exec));
+sandboxMode = "danger-full-access";
+spawnCalls.length = 0;
+await registered.execute({ command: "x", description: "t" }, exec);
+assert.ok(spawnCalls[0].argv[0].includes("pwsh"), "invalid live value falls back to the validated default");
 
 // ---- system-prompt/assemble: description re-renders with the user's shell ----
 

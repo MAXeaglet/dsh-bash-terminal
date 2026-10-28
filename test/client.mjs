@@ -1,10 +1,13 @@
 // Client plugin logic test: load lib/client.js under a mocked __ModuleLoader__
-// and exercise apply(ctx) with mocked slots/locale/settingsScope services.
+// and exercise apply(ctx) against the DSH 0.2.x settings seam
+// (`configForms` + keyed row/bundle slots) instead of the removed 0.1.x
+// `settingsScope` / `settings.general.item` pair.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import { join } from "node:path";
 import assert from "node:assert";
+
 const profileRequire = createRequire(join(os.homedir(), ".dsh", "profiles", "web", "package.json"));
 function loadShared(name) {
   // CI: react is installed into the project node_modules (npm install react --no-save);
@@ -16,67 +19,32 @@ function loadShared(name) {
   }
 }
 
-// --- mock defineStore (shape mirrors dsh-client-store: { spec, create }) ---
-const mockDefineStore = (decl) => ({
-  spec: decl,
-  create: () => {
-    let state = decl.init();
-    const listeners = new Set();
-    const actions = {};
-    for (const key of Object.keys(decl.actions)) {
-      actions[key] = (...params) => { decl.actions[key](state, ...params); for (const f of listeners) f(); };
-    }
-    return {
-      actions,
-      getSnapshot: () => state,
-      subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }
-    };
-  }
-});
-
-// --- mocked services ---
-let scopeState = { status: "ready", value: { defaultShell: "gitbash" }, revision: 3, writable: true };
-const setCalls = [];
-const localeRegisters = [];
-const slotRegistrations = [];
-const ctx = {
-  slots: {
-    inject: (slot, fn) => { slotRegistrations.push({ slot, fn }); },
-    register: (options, Component) => ({ ...options, Component })
-  },
-  locale: { register: (ns, dicts) => { localeRegisters.push({ ns, dicts }); } },
-  settingsScope: {
-    bind: () => ({
-      getSnapshot: () => scopeState,
-      subscribe: () => () => {},
-      set: (field, value) => { setCalls.push({ field, value }); },
-      unset: () => {}
-    })
-  },
-  effect: (fn) => { fn(); }
-};
-
 // --- load the built client bundle under a fake module loader ---
 const bundle = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
 assert.ok(bundle.includes("window.__ModuleLoader__.load"), "bundle wrapped");
-// DSH >= 0.1.5 regression guard: the platform seed table spells the store
-// package @deepseek-ai/dsh-client-store; the retired runtime name would miss it.
-assert.ok(bundle.includes("@deepseek-ai/dsh-client-store"), "requests the seeded client store");
+// Regression guards for the retired seams: the 0.2.x client must not reach for
+// `settingsScope` or the old runtime package name again.
+assert.ok(bundle.includes("@deepseek-ai/dsh-client-ui-primitives"), "requests the platform primitives seed");
+assert.ok(bundle.includes("configForms"), "uses the 0.2.x configForms seam");
+assert.ok(bundle.includes("plugins.row.config"), "registers the keyed row slot");
+assert.ok(bundle.includes("plugins.bundle.config"), "registers the keyed bundle slot");
+assert.ok(!bundle.includes("settingsScope"), "does not use the removed settingsScope service");
 assert.ok(!bundle.includes("dsh-client-runtime"), "does not request the retired client runtime");
+
 let exported;
 globalThis.window = {
   __ModuleLoader__: {
     load: ({ id, factory }) => {
       assert.strictEqual(id, "dsh-bash-terminal");
       exported = factory((name) => {
-        if (name === "@deepseek-ai/dsh-client-store") return { defineStore: mockDefineStore };
-        if (name === "react/jsx-runtime" || name === "react" || name === "react-dom/server") return loadShared(name);
+        if (name === "react" || name === "react/jsx-runtime") return loadShared(name);
         if (name === "@deepseek-ai/dsh-client-ui-primitives") {
           const React = loadShared("react");
-          const el = (tag) => (props) => React.createElement(tag, props, props.children);
+          // Only the two components this bundle destructures are needed; the
+          // registration surface is what the assertions below inspect.
           return {
-            Menu: (props) => React.createElement("div", null, props.anchor),
-            IconChevronDownOutline14: () => null
+            SegmentedControl: (props) => React.createElement("div", null, props.children),
+            SettingsForm: (props) => React.createElement("div", null, props.children)
           };
         }
         throw new Error("unexpected require: " + name);
@@ -86,60 +54,59 @@ globalThis.window = {
 };
 new Function(bundle)();
 assert.ok(exported, "client module exports");
-assert.deepStrictEqual(exported.inject, ["slots", "locale", "settingsScope"]);
+assert.deepStrictEqual(exported.inject, ["slots", "locale", "configForms"]);
 assert.strictEqual(typeof exported.apply, "function");
+
+// --- mocked services ---
+const localeBinds = [];
+const localeRegisters = [];
+const whileServedCalls = [];
+const slotInjections = [];
+const slotRegistrations = [];
+const disposers = [];
+const ctx = {
+  locale: {
+    bind: (ns) => { localeBinds.push(ns); },
+    register: (ns, dicts) => { localeRegisters.push({ ns, dicts }); return () => {}; }
+  },
+  effect: (fn) => { const d = fn(); if (typeof d === "function") disposers.push(d); return d; },
+  configForms: {
+    whileServed: (namespaces, fn) => { whileServedCalls.push(namespaces); return fn(); }
+  },
+  slots: {
+    inject: (slot, fn) => { slotInjections.push(slot); return fn(); },
+    register: (options, Component) => { slotRegistrations.push({ options, Component }); return () => {}; }
+  }
+};
 
 // --- run apply ---
 exported.apply(ctx);
+assert.strictEqual(disposers.length >= 2, true, "effects registered disposers");
 
-// locale dictionaries registered
+// locale dictionaries bound + registered for this page's namespace
+assert.deepStrictEqual(localeBinds, ["settings.bashTerminal"]);
 assert.strictEqual(localeRegisters.length, 1);
-assert.strictEqual(localeRegisters[0].ns, "settings.bash-terminal");
-assert.ok(localeRegisters[0].dicts.zh["shell.title"]);
-assert.ok(localeRegisters[0].dicts.en["shell.title"]);
+assert.strictEqual(localeRegisters[0].ns, "settings.bashTerminal");
+assert.ok(localeRegisters[0].dicts.zh.title, "zh dictionary provided");
+assert.ok(localeRegisters[0].dicts.en.title, "en dictionary provided");
 
-// settings row registered into the General item slot
-assert.strictEqual(slotRegistrations.length, 1);
-assert.strictEqual(slotRegistrations[0].slot, "settings.general.item");
-const regObj = slotRegistrations[0].fn();
-const reg = regObj;
-const Component = regObj.Component;
-assert.strictEqual(reg.name, "settings.general.item");
-assert.strictEqual(reg.id, "bash-terminal-shell");
-assert.strictEqual(typeof reg.order, "number");
-assert.strictEqual(reg.locale, "settings.bash-terminal");
-assert.ok(reg.store && typeof reg.store.create === "function", "store factory passed to register");
-assert.strictEqual(typeof Component, "function", "row component passed");
+// the pages only appear once the Host serves the plugin's namespace
+assert.deepStrictEqual(whileServedCalls, [["tool-bash-terminal"]]);
+assert.deepStrictEqual(slotInjections, ["plugins.row.config", "plugins.bundle.config"]);
 
-// inject callback binds actions, pushes initial snapshot, exposes setShell
-let lastSync;
-const injected = reg.inject({ sync: (...args) => { lastSync = args; } });
-assert.ok(injected && typeof injected.setShell === "function");
-assert.deepStrictEqual(lastSync, ["gitbash", 3, true], "initial snapshot pushed (user default gitbash)");
+// row page: keyed "<package>#<row id>" exactly as the Plugins page computes it
+assert.strictEqual(slotRegistrations.length, 2);
+const row = slotRegistrations.find((r) => r.options.name === "plugins.row.config");
+const bundlePage = slotRegistrations.find((r) => r.options.name === "plugins.bundle.config");
+assert.ok(row, "row registration present");
+assert.ok(bundlePage, "bundle registration present");
+assert.strictEqual(row.options.key, "dsh-bash-terminal#tool-bash-terminal");
+assert.strictEqual(row.options.locale, "settings.bashTerminal");
+assert.strictEqual(bundlePage.options.key, "dsh-bash-terminal");
+assert.strictEqual(typeof row.Component, "function", "row component passed");
+assert.strictEqual(typeof bundlePage.Component, "function", "bundle summary component passed");
 
-// setShell writes through to the settings scope
-injected.setShell("wsl");
-assert.deepStrictEqual(setCalls, [{ field: "defaultShell", value: "wsl" }]);
-
-// row component renders through real React (DSH-native Menu/Button are mocked)
-const { renderToString } = loadShared("react-dom/server");
-const renderState = { shell: "wsl", revision: 3, writable: true };
-const selectors = [];
-const fakeUseStore = (sel) => { selectors.push(sel(renderState)); return selectors[selectors.length - 1]; };
-const t = (k) => ({ "shell.title": "默认终端", "shell.powershell": "PowerShell", "shell.gitbash": "Git Bash", "shell.wsl": "WSL" }[k] ?? k);
-const html = renderToString(loadShared("react").createElement(Component, { t, useStore: fakeUseStore, setShell: injected.setShell }));
-assert.ok(html.includes("默认终端"), "row renders the title");
-assert.ok(!html.includes("AI 无法更改"), "removed the 'AI cannot change' phrase");
-assert.ok(html.includes("WSL"), "selector shows the current shell label");
-assert.ok(html.includes("btSelector"), "selector uses the official capsule class");
-assert.deepStrictEqual(selectors, ["wsl", true], "component reads shell + writable from store");
-
-// settings change -> bound actions sync again (subscribe callback fires push)
-scopeState = { status: "ready", value: { defaultShell: "powershell" }, revision: 4, writable: true };
-// re-invoke the stored subscribe callback path: the bundle registered a
-// subscription when apply ran; we captured nothing, so emulate by calling
-// the register inject again with a fresh bound (fresh push uses new state).
-const injected2 = reg.inject({ sync: (...args) => { lastSync = args; } });
-assert.deepStrictEqual(lastSync, ["powershell", 4, true], "re-push after settings change");
+// disposers are safe to call (module unload path)
+for (const dispose of disposers) dispose();
 
 console.log("CLIENT LOGIC TESTS PASSED");
