@@ -19,5 +19,13 @@ jobs:
         run: node test/unit.mjs
       - name: Run apply/execute mock tests
         run: node test/apply.mjs
+      - name: Run buffer/delivery tests
+        run: node test/buffer.mjs
+      - name: Run terminal session tests (real node-pty)
+        run: node test/terminal.mjs
+      - name: Run settle-window and ssh session tests
+        run: node test/settle.mjs
+      - name: Run end-to-end shell tests (real spawns; skips when the DSH provider is absent)
+        run: node test/e2e.mjs
       - name: Run client logic tests
         run: node test/client.mjs

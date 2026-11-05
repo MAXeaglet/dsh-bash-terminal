@@ -73,7 +73,7 @@ react, react/jsx-runtime, react-dom, react-dom/client,
 ```powershell
 cd D:\WorkSpace\projects\dsh-bash-terminal
 node scripts/build-client.mjs          # 重建 bundle
-npm test                               # unit / apply / client / terminal 四套（走宿主的 0.1.5-rc.1 包）
+npm test                               # unit / apply / buffer / terminal / settle / e2e（走宿主的 0.1.5-rc.1 包）
 dsh --profile web --dump-config | Select-String dsh-bash-terminal   # 组合树
 ```
 
@@ -121,3 +121,115 @@ included. `lib/index.js` therefore reads `config.defaultShell` through
   unchanged in 0.2 and still returns only curated shell keys.
 - Windows only: `apply()` returns early when `process.platform !== "win32"`, so
   this plugin cannot be exercised on Linux, including in a WSL staging bench.
+
+## `ctx.jobs` contract (0.2.x) — verified against `dsh-jobs-local@0.2.0-rc.2`
+
+The terminal session and the background `shell` job both register with the job
+registry. Three details changed in 0.2, and each one failed until 0.5.0:
+
+| Fact (0.2.0-rc.2) | Source | Consequence when violated |
+|---|---|---|
+| `owner` is the **session id**: `start()` calls `resolveOwner(spec.owner)` → `agents.get(session)` | `dsh-jobs-local/lib/index.js:413,528-535` | passing the Agent object threw `session "[object Object]" has no live agent`, so `terminal open` and `shell run_in_background` died **after** the PTY was spawned (session leaked, no id ever returned) |
+| `spec.run(handle)` must return `{ cancel, done }` with `done` resolving `{ status, detail }` | `dsh-jobs-local/lib/index.js:437,448,736-739` | `settle()` writes `outcome.status` straight into the record; a raw PTY `{ exitCode, signal }` left the job "running" forever |
+| `spec.output` is an array of pull sources `{ channel, read(fromByte) → { text, nextOffset, lossy } }`, polled every 150 ms | `dsh-jobs-local/lib/index.js:119-137,479-486`; reference implementation `dsh-tool-bash/lib/index.js:66-79,399` | without it `job_output` shows nothing: 0.2's pump never calls the producer's own `readOutput` hook |
+
+`dsh-tool-jobs` renders every channel except `stderr` as stdout and drops
+`channel: "log"` entirely, which is why the terminal session source reports
+`channel: "stdout"`.
+
+`test/jobs-contract.mjs` feeds that exact spec shape into the **real** registry
+(`node test/jobs-contract.mjs`, run where the DSH `@deepseek-ai/*` tree is
+resolvable) and asserts three things in one pass: the job is admitted for a
+session-id owner, the pump carries the source text into `read()` chunks, and
+the producer's `done` settles the record as `completed` instead of leaving it
+"running" forever.
+
+## Shell script transport (0.6.1) — verified against `dsh-subprocess-local@0.2.2-rc.1`
+
+The `shell` tool no longer passes the command text as one argv element. On Windows
+that route crosses `CreateProcess` (32,767-character command-line limit) and, for
+WSL, the `wsl.exe` argument bridge a second time; heredoc terminators/quotes could
+be re-parsed, and a truncated script could leave `cat` reading stdin forever.
+
+| Backend | Invocation | Script delivery |
+|---|---|---|
+| `wsl` | `wsl [-d <distro>] -e bash -ls` | `stdio.stdin = { data: "<script>\n" }` |
+| `gitbash` | `<Git>\bin\bash.exe -ls` | `stdio.stdin = { data: "<script>\n" }` |
+| `powershell` | `pwsh -NoLogo -NoProfile -NonInteractive -EncodedCommand <base64>` | argv, UTF-16LE, `$ProgressPreference = 'SilentlyContinue';` prefix |
+
+The seam's batch shape is what guarantees no open stdin survives:
+`dsh-subprocess` defines `{ data }` as "writes the bytes and closes", and
+`dsh-subprocess-local/lib/runner-launch-*.js` implements it with `stdin.end(data)`.
+A command that reads stdin (`cat`, `read`) therefore sees EOF immediately, in
+foreground and background alike; `job_kill` is no longer implicated in breaking a
+stdin wait because there is nothing to wait on.
+
+The login flag is preserved (`-l`): `bash -lc '<probe>'` and `bash -ls` with the
+probe on stdin print the same `PWD` and identical `PATH` for Git Bash and WSL
+(checked on this machine), so `git`, `node`, etc. resolve as before.
+
+PowerShell note: Windows PowerShell 5.1 emits its "Preparing modules for first
+use" progress record as a CLIXML blob on stderr for `-EncodedCommand` invocations.
+Prefixing the encoded script with `$ProgressPreference = 'SilentlyContinue';`
+suppresses it; the prefix shares line 1, so later error line numbers stay
+accurate. On pwsh 7 the prefix is a harmless no-op.
+
+Windows PowerShell 5.1 also serializes **cmdlet error records** on stderr as
+CLIXML under `-EncodedCommand` (a host-side quirk tracked upstream as
+[PowerShell/PowerShell#16678](https://github.com/PowerShell/PowerShell/issues/16678)):
+the text is intact inside `<S S="Error">` but is not the plain `-Command`
+format. Native program stderr (`git`, `node`, `cmd`, ...) is passed through
+unchanged, and exit codes are identical to `-Command` (`exit N` → N, a failing
+last statement → 1, a terminating error → 1). The reason for accepting this is
+the alternative: `-Command <script>` is exactly the argv route this release
+removes, and `-File -` does not read a script from stdin on 5.1 (it echoes
+interactive prompts to stdout), so `-EncodedCommand` is the only tested way to
+keep PowerShell's exit-code semantics without putting the script in argv.
+
+## Live ssh session check (manual — needs a real host)
+
+`node scripts/verify-ssh-session.mjs [sshHost]` drives the plugin's own ssh
+action against a real server and asserts the properties that make a session
+worth having. It is deliberately outside `npm test` (a host and credentials are
+required) and it only creates and removes its own scratch directory under
+`/tmp` — no services are touched.
+
+Verified on 2026-10-16 against `second_brain` (Ubuntu 26.04.1, `wsl` backend):
+
+| Property | Observed |
+|---|---|
+| ssh session backend | `wsl`, session reported with `sshHost: "second_brain"` |
+| one login, many commands | remote `$$` **identical** across sends (`1695997`) — one shell, not one per command |
+| state survives | exported `DSH_MARK` and `cwd` still set in later commands |
+| Ctrl+C reaches the remote job | `^C` echoed, session usable afterwards |
+| cleanup | scratch dir removed, `who` empty, no leftover processes |
+| logout | `Connection to 178.217.99.183 closed.` |
+
+Machine-specific facts that shaped the design:
+
+- ssh config lives at **`/home/igor/.ssh/config` inside WSL** (hosts:
+  `second_brain`, `singapore`, `vdsina_2g`), while
+  `C:\Users\igroc\.ssh\config` is a **0-byte file**. `ssh second_brain` therefore
+  resolves in WSL and fails from PowerShell with `Could not resolve hostname` —
+  hence `sshShell` defaults to `wsl` independently of `defaultShell`.
+- The one-shot `shell` tool *can* run `ssh -o BatchMode=yes host '<cmd>'`, which is
+  exactly why the model kept doing that: it is a valid pattern for a single
+  command and loses cwd/variables for anything longer. Only the session tool keeps
+  state, and only the session tool can answer an interactive prompt.
+- **Always end `send` input with `\r`**, not `\n`. A PTY wants `\r`; with `\n` the
+  command may still run, but `waitSettled` then returns before the reply arrives and
+  the model gets an empty result for that step.
+- A brief `send` reply is expected when a command legitimately prints nothing (or is
+  still thinking): the answer is `read` again, and `waiting: true` says so.
+
+## Environment notes (this machine)
+
+- The DSH install carries `node-pty@1.2.0-beta.15` under
+  `@deepseek-ai/dsh/node_modules`, whose `spawn()` returns **`pid: 0`** on
+  Windows; the plugin's own dependency (`node-pty@^1.1.0`, resolved from the
+  profile) returns a real pid. If the plugin ever resolves the DSH copy,
+  `open`/`list` will report pid 0.
+- Running the tests in the project dir needs `node_modules` there: junction
+  `@deepseek-ai` → `%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai`
+  and `node-pty` → `<profile>\node_modules\node-pty` (the profile's 1.1.0, not
+  the DSH copy — see above).

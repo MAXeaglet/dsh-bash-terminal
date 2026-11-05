@@ -1,6 +1,6 @@
 {
   "name": "dsh-bash-terminal",
-  "version": "0.4.0",
+  "version": "0.6.1",
   "description": "DSH plugin: one shell tool that runs commands through PowerShell, Git Bash, or WSL on Windows, with a configurable default terminal.",
   "author": "MAXeaglet",
   "license": "MIT",
@@ -46,7 +46,7 @@
   ],
   "scripts": {
     "build:client": "node scripts/build-client.mjs",
-    "test": "node test/unit.mjs && node test/apply.mjs && node test/terminal.mjs"
+    "test": "node test/unit.mjs && node test/apply.mjs && node test/buffer.mjs && node test/terminal.mjs && node test/settle.mjs && node test/e2e.mjs"
   },
   "dsh": {
     "bundle": {

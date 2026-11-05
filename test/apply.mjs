@@ -45,7 +45,7 @@ ctx.subprocess = {
   spawn: (spec) => { spawnCalls.push(spec); return fakeHandle; }
 };
 
-const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
+const exec = { signal: new AbortController().signal, agent: { id: "session-1", session: { header: { cwd: "D:/WorkSpace" } } }, callId: "c1" };
 
 // 1) user setting = powershell (default) -> powershell argv
 userDefaultShell = "powershell";
@@ -55,7 +55,10 @@ assert.strictEqual(result.exitCode, 0);
 assert.strictEqual(spawnCalls.length, 1);
 const spec = spawnCalls[0];
 assert.ok(spec.argv[0].endsWith("pwsh.exe") || spec.argv[0].endsWith("powershell.exe"), "pwsh/powershell resolved: " + spec.argv[0]);
-assert.deepStrictEqual(spec.argv.slice(1, 5), ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]);
+assert.deepStrictEqual(spec.argv.slice(1, 5), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+assert.strictEqual(spec.argv.length, 6, "the script is the single encoded argument");
+assert.strictEqual(Buffer.from(spec.argv[5], "base64").toString("utf16le"), "$ProgressPreference = 'SilentlyContinue'; Get-Date", "the encoded argument round-trips the command");
+assert.strictEqual(spec.stdio.stdin, "ignore", "PowerShell takes its script through argv, not stdin");
 assert.strictEqual(spec.cwd, "D:/WorkSpace");
 assert.strictEqual(spec.env.DSH_WEB_URL, "http://127.0.0.1:3080");
 assert.strictEqual(spec.graceMs, 3000);
@@ -65,14 +68,17 @@ assert.ok(spec.signal instanceof AbortSignal);
 userDefaultShell = "gitbash";
 spawnCalls.length = 0;
 await registered.execute({ command: "echo hi", description: "test" }, exec);
-assert.deepStrictEqual(spawnCalls[0].argv.slice(0, 2), ["C:\\Program Files\\Git\\bin\\bash.exe", "-lc"]);
+assert.deepStrictEqual(spawnCalls[0].argv.slice(0, 2), ["C:\\Program Files\\Git\\bin\\bash.exe", "-ls"]);
+assert.deepStrictEqual(spawnCalls[0].stdio.stdin, { data: "echo hi\n" }, "the gitbash script is written to stdin, not argv");
 
 // 3) user setting = wsl + distro + workdir
 userDefaultShell = "wsl";
 spawnCalls.length = 0;
 await registered.execute({ command: "pwd", description: "t", distro: "Ubuntu", workdir: "projects" }, exec);
 const wslPath = (process.env.SystemRoot ?? "C:\\Windows").replace(/\\$/, "") + "\\System32\\wsl.exe";
-assert.deepStrictEqual(spawnCalls[0].argv, [wslPath, "-d", "Ubuntu", "-e", "bash", "-lc", "pwd"]);
+assert.deepStrictEqual(spawnCalls[0].argv, [wslPath, "-d", "Ubuntu", "-e", "bash", "-ls"]);
+assert.deepStrictEqual(spawnCalls[0].stdio.stdin, { data: "pwd\n" }, "the wsl script is written to stdin, not argv");
+assert.ok(!spawnCalls[0].argv.includes("pwd"), "wsl argv carries no script");
 assert.strictEqual(spawnCalls[0].cwd, "D:\\WorkSpace\\projects");
 assert.ok(spawnCalls[0].env.WSLENV.includes("DSH_WEB_URL"), "WSLENV should carry DSH vars");
 
@@ -147,23 +153,26 @@ assert.strictEqual(bg.kind, "background");
 assert.strictEqual(bg.jobId, "job-bg-1");
 assert.strictEqual(jobsStarted.length, 1);
 assert.strictEqual(jobsStarted[0].kind, "shell/powershell");
+// DSH 0.2.x: the owner is the session id the agent registry resolves, and the
+// job's output comes from pull sources that bind after the starter spawns.
+assert.strictEqual(jobsStarted[0].owner, "session-1", "owner is the session id, not the Agent object");
+assert.deepStrictEqual(jobsStarted[0].output.map((source) => source.channel), ["stdout", "stderr"]);
+assert.deepStrictEqual(jobsStarted[0].output[0].read(0), { text: "", nextOffset: 0, lossy: false }, "a source read before the starter spawns yields nothing");
 const bgHooks = jobsStarted[0].run();
 assert.strictEqual(typeof bgHooks.cancel, "function");
 assert.ok(bgHooks.done instanceof Promise);
 assert.strictEqual(typeof bgHooks.readOutput, "function");
 assert.ok(spawnCalls.length >= 1, "background spawned");
+assert.ok(spawnCalls[0].argv.includes("-EncodedCommand"), "the background spawn carries the encoded script");
+assert.strictEqual(spawnCalls[0].stdio.stdin, "ignore", "the background PowerShell spawn leaves no stdin pipe open");
+assert.strictEqual(jobsStarted[0].output[0].read(0).text, "mock-out", "after the spawn the source streams the process output");
+assert.strictEqual(jobsStarted[0].output[0].read(0).nextOffset, 1);
 
 // invalid args throw
 await assert.rejects(() => registered.execute({ command: "", description: "t" }, exec));
 
 // The Config enum is what rejects an out-of-enum value at the settings boundary.
 assert.throws(() => Config({ defaultShell: "fish" }), "Config rejects an out-of-enum shell");
-
-// At runtime a stale hand-edited value falls back instead of failing, because
-// prompt assembly must never break on it.
-userDefaultShell = "fish";
-const fishAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
-assert.ok(fishAssembly.tools[0].description.includes("pwsh -NoLogo"), "out-of-enum value falls back to the resolved default");
 
 // ---- system-prompt/assemble: description re-renders with the user's shell ----
 
@@ -177,10 +186,16 @@ const makeAssembly = () => ({
   contexts: []
 });
 
+// At runtime a stale hand-edited value falls back instead of failing, because
+// prompt assembly must never break on it.
+userDefaultShell = "fish";
+const fishAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
+assert.ok(fishAssembly.tools[0].description.includes("pwsh -NoLogo"), "out-of-enum value falls back to the resolved default");
+
 // gitbash user setting -> bash-flavored description for the shell tool only.
 userDefaultShell = "gitbash";
 const gitAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
-assert.ok(gitAssembly.tools[0].description.includes("bash -lc"), "gitbash description applied");
+assert.ok(gitAssembly.tools[0].description.includes("bash -ls"), "gitbash description applied");
 assert.ok(gitAssembly.tools[0].description.includes("is gitbash"), "gitbash backend named");
 assert.strictEqual(gitAssembly.tools[1].description, "read a file", "other tools untouched");
 
@@ -188,7 +203,7 @@ assert.strictEqual(gitAssembly.tools[1].description, "read a file", "other tools
 userDefaultShell = "powershell";
 const psAssembly = await assembleHandler(makeAssembly(), {}, async () => makeAssembly());
 assert.ok(psAssembly.tools[0].description.includes("pwsh -NoLogo"), "powershell description applied after setting change");
-assert.ok(!psAssembly.tools[0].description.includes("bash -lc"), "stale gitbash description gone");
+assert.ok(!psAssembly.tools[0].description.includes("bash -ls"), "stale gitbash description gone");
 
 // Registration-time description already matches the initial setting.
 assert.ok(registered.description.includes("is powershell"), "registration-time description matches initial default");

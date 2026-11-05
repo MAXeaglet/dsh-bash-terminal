@@ -8,9 +8,11 @@ DSH（DeepSeek Harness）插件：一个 `shell` 工具，在 Windows 上统一�
 
 | 后端 | 实际执行 | 语法 / 路径 | 环境变量 |
 |------|----------|-------------|----------|
-| `powershell`（默认） | `pwsh -NoLogo -NoProfile -NonInteractive -Command <cmd>` | PowerShell；`C:\...` | `$env:NAME` |
-| `gitbash` | Git for Windows `bash -lc <cmd>` | POSIX；`/d/WorkSpace`；PATH 含 `/usr/bin`、`/mingw64/bin` | `$NAME` |
-| `wsl` | `wsl [-d <distro>] -e bash -lc <cmd>` | Linux；`/mnt/d/...` | `$NAME`（经 WSLENV） |
+| `powershell`（默认） | `pwsh -NoLogo -NoProfile -NonInteractive -EncodedCommand <base64 UTF-16LE>` | PowerShell；`C:\...` | `$env:NAME` |
+| `gitbash` | Git for Windows `bash -ls`（脚本写入 stdin） | POSIX；`/d/WorkSpace`；PATH 含 `/usr/bin`、`/mingw64/bin` | `$NAME` |
+| `wsl` | `wsl [-d <distro>] -e bash -ls`（脚本写入 stdin） | Linux；`/mnt/d/...` | `$NAME`（经 WSLENV） |
+
+**脚本按字节传递，不经过 argv。** 命令文本不会再作为一个 argv 元素穿过 Windows 命令行 / `wsl.exe` 参数桥：bash 从 stdin 读取脚本（写入后立即关闭管道，读 stdin 的 `cat`/`read` 会立刻看到 EOF，而不是挂起），连超过 32 KB 的大脚本也能原样执行；PowerShell 收到 base64 UTF-16LE 的 `-EncodedCommand`，换行与引号原样到达（编码后的载荷仍受 Windows 命令行长度限制）。`-l` 登录标志保留，PATH/环境与之前一致。
 
 每次调用都启动全新 shell：**不保留状态**（cwd / 变量 / 别名）——请传 `workdir` 而不是用 `cd`。
 
@@ -90,7 +92,9 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 
 - 一次性命令（默认终端）：`shell(command: "git status", description: "查看 git 状态")`
 - 跨轮保持状态（交互式）：`terminal(action: "open")` → 记下 `sessionId` → `terminal(action: "send", sessionId, input: "cd /d/project\n")` → `terminal(action: "send", sessionId, input: "npm run dev\n")` → `terminal(action: "close", sessionId)`
-- 中断正在运行的程序：`terminal(action: "signal", sessionId, signal: "SIGINT")`
+- **远程服务器（推荐姿势）**：`terminal(action: "ssh", sshHost: "second_brain")` → 记下 `sessionId` → 之后每步都用 `terminal(action: "send", sessionId, input: "cd /srv/app && systemctl status nginx\n")`，**同一个登录**里连续操作。不要用 `shell(command: "ssh second_brain <cmd>")` 一步步来：那等于每条命令重开一次连接，cwd/变量全丢，还要为握手等上几秒
+- 远程命令跑太久想中断：`terminal(action: "signal", sessionId, signal: "SIGINT")` —— 信号发给**远端前台进程**，不会把 ssh 客户端本身打断
+- 读取是增量的：`send` 只回该命令的新输出；`more: true` 或 `waiting: true` 时再 `read` 一次；要看整段历史用 `terminal(action: "read", sessionId, full: true)`
 - 查看活动会话：`terminal(action: "list")`
 - 沙箱拒绝后升级：`shell(command: ..., sandbox_permissions: "workspace-write", justification: "...")`
 
@@ -103,11 +107,18 @@ node "$env:APPDATA\nvm\v24.16.0\node_modules\@deepseek-ai\dsh\lib\bin.js" --prof
 | 键 | 默认 | 说明 |
 |----|------|------|
 | `defaultShell` | `powershell` | 设置未覆盖时的后端 |
+| `sshShell` | `wsl` | `terminal(action: "ssh")` 使用哪个后端登录远程主机 |
 | `timeoutMs` | 120000 | 默认超时 |
 | `maxTimeoutMs` | 600000 | 调用方 timeoutMs 上限 |
 | `pwshPath` | 自动探测 | 固定 pwsh.exe 路径 |
 | `gitBashPath` | 自动探测 | 固定 git bash.exe 路径 |
 | `wslPath` | 自动探测 | 固定 wsl.exe 路径 |
+
+> **为什么 `sshShell` 独立于 `defaultShell`**：ssh 的 host 别名和密钥在 **WSL** 的
+> `~/.ssh/config` 里（Windows 侧 `%USERPROFILE%\.ssh\config` 常见为空文件），所以在
+> PowerShell 里 `ssh second_brain` 会直接 `Could not resolve hostname`。把日常终端切成
+> PowerShell 不应连带弄坏远程工作，因此 ssh 会话默认仍走 wsl；显式配成其它后端也会被尊重，
+> 而 wsl 不可用时 ssh 动作会给出可操作的报错而不是静默失败。
 
 ## 发布（npm）
 
@@ -137,11 +148,20 @@ powershell -ExecutionPolicy Bypass -File install.ps1 uninstall
 `terminal` 工具在 PTY 接缝（node-pty；Windows 上因上游 `spawnTerminal` 的 process inspector 仅支持 POSIX，由 `lib/terminal.js` 直连 node-pty，非 Windows 仍走官方 `ctx.subprocess.spawnTerminal`）上提供**持久交互会话**：
 
 - `action: open` 启动一个真实终端会话（按你设置的默认终端；wsl 可传 `distro`），返回 `sessionId`
+- `action: ssh` **直接登录远程主机**（`sshHost`: `~/.ssh/config` 别名 / `user@host` / 地址），返回已登录的 `sessionId`；后续 `send` 复用**同一个 ssh 登录**，cwd、导出变量、shell 状态都保留。密码与 2FA 提示是交互式的，用 `send` 回答即可 —— 这是 `shell` 工具做不到的
 - `action: send` 写入输入并读新输出；`action: read` 只读不写；`action: signal` 向前台进程组发信号（SIGINT = Ctrl+C）
-- `action: close` 终止会话
+- `action: close` 终止会话；`action: list` 列出活动会话（远程会话会显示 `sshHost`）
 - **会话状态跨调用保持**（cwd / 变量 / 别名），适合 REPL、ssh、交互式 CLI
-- `send` 会等待输出稳定（300ms 静默，上限 5s）返回**完整回复**；输出超 1MB 时报 `truncated` 提示
-- 输入用 `\\n`（或 \\r）结尾表示回车
+- **增量读取**：每次 send/read/signal 只返回**该读者游标之后**的新输出，并按终端显示渲染（剥离转义序列、折叠 `\r` 覆盖），不会把整段历史反复塞进上下文
+- 每条回复带元信息：`nextOffset`（绝对流位置，游标停在这里）、`pending`（未换行的尾巴，通常是提示符）、`more: true`（还有整行输出在等下一次 read）、`waiting: true`（窗口到期时命令仍在产出，先再 read 一次再发下一条命令）、`elided`（更早的字符已不在保留环里）
+- 单条回复上限 32 KB（UTF-8 字节）：超出部分留在环里，靠 `more` + 再 read 一次分页取回，**不丢输出**；游标只前进到实际交付的文本之后
+- `from: 0`（或 `full: true`）重读整段保留日志，`from: <nextOffset>` 从旧位置续读，`raw: true` 返回未渲染的原始流
+- 输出环按 **UTF-8 字节**计上限（默认 1 MiB，超限丢最旧）；多字节字符与代理对不会被截断
+- `send` 等待输出稳定后返回**完整回复**：本地 300ms 静默 / 8s 上限，远程（ssh 会话）1200ms 静默 / 20s 上限
+- 等待以**写入时的输出位置**为锚点：只有"写入之后出现了新输出、随后安静下来"才算完成。否则一次写入空闲会话会立刻返回上一条命令的输出、而新命令的输出一个字都没有（远程场景下这会被读成"命令没反应"）
+- 命令迟迟不说话时（本地 3.5s / 远程 8s 内无任何新输出）返回 `waiting: true`，提示再 read 一次，而不是给出一个空结果
+- 远程会话用 `TERM=xterm-256color` 并去掉 `NO_COLOR`（远端颜色与行编辑正常），本地会话保持 `dumb`
+- 输入用 `\n`（或 `\r`）结尾表示回车
 
 ## 沙箱（官方机制对接）
 
@@ -161,7 +181,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 uninstall
 ## 交互终端已知限制（ConPTY）
 
 - **PowerShell 5.1 无法在 ConPTY 启动**（0x8009001d）—— 交互式 PowerShell 需要安装 [PowerShell 7](https://github.com/PowerShell/PowerShell/releases)（一次性命令不受影响）。
-- **wsl.exe 交互模式在 ConPTY 下可能触发 WSL 服务 RPC 错误**（0x8007072c，偶发）—— 一次性 `wsl -e bash -lc ...` 命令正常；交互会话建议直接用 Windows Terminal / WSL 终端，或重试。
+- **wsl.exe 交互模式在 ConPTY 下可能触发 WSL 服务 RPC 错误**（0x8007072c，偶发）—— 一次性 `wsl ... bash -ls` 命令正常；交互会话建议直接用 Windows Terminal / WSL 终端，或重试。
 - **Windows 上 node-pty 不接受命名信号**：`signal` 的 `SIGINT` 映射为 Ctrl+C（`\x03`），其他信号（`SIGTERM` / `SIGKILL` / `SIGTSTP` / `SIGHUP`）退化为终止会话。
 - Git Bash 交互会话完全正常。
 
@@ -174,9 +194,11 @@ powershell -ExecutionPolicy Bypass -File install.ps1 uninstall
 ## 测试
 
 ```powershell
-cd D:\WorkSpace\projects\dsh-bash-terminal
-node test\unit.mjs    # 纯函数单测（路径解析/argv/env/渲染/校验）
-node test\apply.mjs   # apply + execute mock 集成测试（用户设置决定后端、workdir、WSLENV、超时）
-node test\client.mjs  # client 插件逻辑测试（slot 注册/初始快照/setShell 写透）
-node scripts/build-client.mjs  # 打包前端设置项 bundle → lib/client.js
+npm test                  # unit → apply → buffer → terminal → settle → e2e
+node test\unit.mjs        # 纯函数单测（路径解析/argv/stdin/env/渲染/校验）
+node test\apply.mjs       # apply + execute mock 集成测试（用户设置决定后端、workdir、WSLENV、超时、jobs spec）
+node test\buffer.mjs      # 增量交付单测（绝对偏移、字节上限、行框定、分页、渲染）
+node test\e2e.mjs         # 真实 spawn：WSL/Git Bash heredoc 字节一致（前台+后台）、裸 cat EOF、PowerShell 多行、80 KB 大脚本
+node test\client.mjs      # client 插件逻辑测试（slot 注册/初始快照/setShell 写透）
+node scripts\build-client.mjs  # 打包前端设置项 bundle → lib/client.js
 ```
