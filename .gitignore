@@ -9,3 +9,6 @@ package-lock.json
 # scratch
 *.log
 .DS_Store
+
+# graphify knowledge-graph output (generated)
+graphify-out/
